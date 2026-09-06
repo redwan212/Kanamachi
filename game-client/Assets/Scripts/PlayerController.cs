@@ -20,6 +20,13 @@ public class PlayerController : MonoBehaviour
 
     void Update()
     {
+        // Freeze movement while the Kanamachi is guessing who they caught.
+        if (GameManager.Instance != null && GameManager.Instance.IsGuessingPhase)
+        {
+            moveInput = Vector2.zero;
+            return;
+        }
+
         float horizontal = 0f;
         float vertical = 0f;
 
