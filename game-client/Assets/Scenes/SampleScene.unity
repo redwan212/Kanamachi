@@ -131,7 +131,8 @@ GameObject:
   - component: {fileID: 147149642}
   - component: {fileID: 147149641}
   - component: {fileID: 147149640}
-  - component: {fileID: 147149639}
+  - component: {fileID: 147149644}
+  - component: {fileID: 147149645}
   m_Layer: 0
   m_Name: Player1
   m_TagString: Untagged
@@ -139,20 +140,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &147149639
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 147149638}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 76ee73104649eb147af5b7b4b10859a3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerController
-  controls: 0
-  moveSpeed: 4
 --- !u!58 &147149640
 CircleCollider2D:
   m_ObjectHideFlags: 0
@@ -291,6 +278,35 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &147149644
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 147149638}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ea10db13c635a9b4887fd40b841ed07a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ClapController
+  teaseRiskRadius: 3
+  teaseBonusPoints: 5
+  clapCooldown: 1
+--- !u!114 &147149645
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 147149638}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cc64357cdd393554a9a082bd1209b372, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HumanPlayer
+  moveSpeed: 4
+  controls: 0
 --- !u!1 &282136923
 GameObject:
   m_ObjectHideFlags: 0
@@ -302,6 +318,7 @@ GameObject:
   - component: {fileID: 282136926}
   - component: {fileID: 282136925}
   - component: {fileID: 282136924}
+  - component: {fileID: 282136927}
   m_Layer: 0
   m_Name: Wall_Bottom
   m_TagString: Untagged
@@ -430,6 +447,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &282136927
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 282136923}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f09fab542284ac46b777b75a1626278, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Wall
+  blocksMovement: 1
 --- !u!1 &391159709
 GameObject:
   m_ObjectHideFlags: 0
@@ -441,6 +471,7 @@ GameObject:
   - component: {fileID: 391159712}
   - component: {fileID: 391159711}
   - component: {fileID: 391159710}
+  - component: {fileID: 391159713}
   m_Layer: 0
   m_Name: Wall_Right
   m_TagString: Untagged
@@ -569,6 +600,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &391159713
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 391159709}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f09fab542284ac46b777b75a1626278, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Wall
+  blocksMovement: 1
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -826,7 +870,8 @@ GameObject:
   - component: {fileID: 683065199}
   - component: {fileID: 683065198}
   - component: {fileID: 683065197}
-  - component: {fileID: 683065196}
+  - component: {fileID: 683065201}
+  - component: {fileID: 683065202}
   m_Layer: 0
   m_Name: Player2
   m_TagString: Untagged
@@ -834,20 +879,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &683065196
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 683065195}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 76ee73104649eb147af5b7b4b10859a3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerController
-  controls: 1
-  moveSpeed: 4
 --- !u!58 &683065197
 CircleCollider2D:
   m_ObjectHideFlags: 0
@@ -986,6 +1017,35 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &683065201
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 683065195}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ea10db13c635a9b4887fd40b841ed07a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ClapController
+  teaseRiskRadius: 3
+  teaseBonusPoints: 5
+  clapCooldown: 1
+--- !u!114 &683065202
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 683065195}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cc64357cdd393554a9a082bd1209b372, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HumanPlayer
+  moveSpeed: 4
+  controls: 1
 --- !u!1 &843628191
 GameObject:
   m_ObjectHideFlags: 0
@@ -997,6 +1057,7 @@ GameObject:
   - component: {fileID: 843628194}
   - component: {fileID: 843628193}
   - component: {fileID: 843628192}
+  - component: {fileID: 843628195}
   m_Layer: 0
   m_Name: Wall_Left
   m_TagString: Untagged
@@ -1125,6 +1186,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &843628195
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 843628191}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f09fab542284ac46b777b75a1626278, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Wall
+  blocksMovement: 1
 --- !u!1 &1179172379
 GameObject:
   m_ObjectHideFlags: 0
@@ -1135,6 +1209,11 @@ GameObject:
   m_Component:
   - component: {fileID: 1179172381}
   - component: {fileID: 1179172380}
+  - component: {fileID: 1179172382}
+  - component: {fileID: 1179172384}
+  - component: {fileID: 1179172383}
+  - component: {fileID: 1179172386}
+  - component: {fileID: 1179172385}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -1155,12 +1234,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
   players:
-  - {fileID: 147149638}
-  - {fileID: 683065195}
+  - {fileID: 147149645}
+  - {fileID: 683065202}
   spawnPoints:
   - {x: -3, y: 0}
   - {x: 3, y: 0}
   catchDistance: 2
+  correctGuessPoints: 10
+  wrongGuessPenalty: 5
 --- !u!4 &1179172381
 Transform:
   m_ObjectHideFlags: 0
@@ -1176,6 +1257,77 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1179172382
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1179172379}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a33f29efa47ed644ad32e053f8484b3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BlindfoldManager
+  globalLight: {fileID: 619394801}
+  blindfoldIntensity: 0.08
+  normalIntensity: 1
+  visionOuterRadius: 2.5
+  visionInnerRadius: 0.7
+  visionIntensity: 1.3
+  visionColor: {r: 1, g: 0.95, b: 0.8, a: 1}
+--- !u!114 &1179172383
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1179172379}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dcb3153779806a04994bd3060117e6ef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ScoreManager
+--- !u!114 &1179172384
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1179172379}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 248cee9074248de4ba92fe899651e089, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SoundCueManager
+  minInterval: 0.25
+  maxInterval: 1.2
+  showDebugLabel: 1
+--- !u!114 &1179172385
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1179172379}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 97ec2ced3ec435a45b444d8e36c64e6e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CourtyardLevel
+--- !u!114 &1179172386
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1179172379}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b0a7b7621de692c40b9eeb28f387b2f8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelManager
+  currentLevel: {fileID: 1179172385}
 --- !u!1 &1272394587
 GameObject:
   m_ObjectHideFlags: 0
@@ -1279,6 +1431,7 @@ GameObject:
   - component: {fileID: 1491661743}
   - component: {fileID: 1491661742}
   - component: {fileID: 1491661741}
+  - component: {fileID: 1491661744}
   m_Layer: 0
   m_Name: Wall_Top
   m_TagString: Untagged
@@ -1407,6 +1560,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1491661744
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1491661740}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f09fab542284ac46b777b75a1626278, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Wall
+  blocksMovement: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -2,31 +2,15 @@ using UnityEngine;
 
 public enum ControlScheme { WASD, Arrows }
 
-[RequireComponent(typeof(Rigidbody2D))]
-public class PlayerController : MonoBehaviour
+// A human-controlled Player. Reads keyboard input directly.
+// This replaces the old standalone PlayerController script.
+public class HumanPlayer : Player
 {
-    [Header("Setup")]
+    [Header("Human Setup")]
     public ControlScheme controls = ControlScheme.WASD;
-    public float moveSpeed = 4f;
 
-    private Rigidbody2D rb;
-    private Vector2 moveInput;
-
-    void Awake()
+    protected override void UpdateMovementInput()
     {
-        rb = GetComponent<Rigidbody2D>();
-        rb.gravityScale = 0f; // top-down movement, no gravity
-    }
-
-    void Update()
-    {
-        // Freeze movement while the Kanamachi is guessing who they caught.
-        if (GameManager.Instance != null && GameManager.Instance.IsGuessingPhase)
-        {
-            moveInput = Vector2.zero;
-            return;
-        }
-
         float horizontal = 0f;
         float vertical = 0f;
 
@@ -46,10 +30,5 @@ public class PlayerController : MonoBehaviour
         }
 
         moveInput = new Vector2(horizontal, vertical).normalized;
-    }
-
-    void FixedUpdate()
-    {
-        rb.MovePosition(rb.position + moveInput * moveSpeed * Time.fixedDeltaTime);
     }
 }

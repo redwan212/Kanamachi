@@ -1,13 +1,12 @@
 using UnityEngine;
 
 // Plays a repeating "footstep" cue whose loudness, pitch, and tempo reflect
-// how close the nearest non-Kanamachi player is. This is the Kanamachi's
-// main way of sensing others while blindfolded.
+// how close the nearest non-Kanamachi player is.
 public class SoundCueManager : MonoBehaviour
 {
     [Header("Footstep Timing")]
-    public float minInterval = 0.25f; // fastest tempo (very close)
-    public float maxInterval = 1.2f;  // slowest tempo (quiet/far)
+    public float minInterval = 0.25f;
+    public float maxInterval = 1.2f;
 
     [Header("Debug Display")]
     public bool showDebugLabel = true;
@@ -21,7 +20,7 @@ public class SoundCueManager : MonoBehaviour
     {
         audioSource = gameObject.AddComponent<AudioSource>();
         audioSource.playOnAwake = false;
-        audioSource.spatialBlend = 0f; // fully 2D, represents what the Kanamachi "hears"
+        audioSource.spatialBlend = 0f;
         audioSource.clip = GenerateFootstepClip();
 
         cueSystem = new NormalSoundCueSystem();
@@ -31,7 +30,7 @@ public class SoundCueManager : MonoBehaviour
     {
         if (GameManager.Instance == null) return;
 
-        GameObject kanamachi = GameManager.Instance.GetKanamachiPlayer();
+        Player kanamachi = GameManager.Instance.GetKanamachiPlayer();
         if (kanamachi == null) return;
 
         float closestDistance = float.MaxValue;
@@ -70,7 +69,6 @@ public class SoundCueManager : MonoBehaviour
         }
     }
 
-    // Generates a short soft "thump" tone procedurally, so no external audio file is needed.
     private AudioClip GenerateFootstepClip()
     {
         int sampleRate = 44100;

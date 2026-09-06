@@ -1,10 +1,9 @@
 using UnityEngine;
 
-// CLAP: any player can press a key to make a loud, distinct noise.
-// TEASE: if that clap happens while the player is close to the Kanamachi,
-// it counts as "teasing" and earns bonus points (risk/reward - the closer
-// you dare to get, the more likely you are to also get caught).
-[RequireComponent(typeof(PlayerController))]
+// CLAP: a human player presses a key to make a loud, distinct noise.
+// TEASE: if that clap happens while close to the Kanamachi, it counts as
+// "teasing" and earns bonus points (risk/reward).
+[RequireComponent(typeof(HumanPlayer))]
 public class ClapController : MonoBehaviour
 {
     [Header("Tease Settings")]
@@ -12,13 +11,13 @@ public class ClapController : MonoBehaviour
     public int teaseBonusPoints = 5;
     public float clapCooldown = 1f;
 
-    private PlayerController controller;
+    private HumanPlayer humanPlayer;
     private AudioSource audioSource;
     private float cooldownTimer;
 
     void Awake()
     {
-        controller = GetComponent<PlayerController>();
+        humanPlayer = GetComponent<HumanPlayer>();
         audioSource = gameObject.AddComponent<AudioSource>();
         audioSource.playOnAwake = false;
         audioSource.spatialBlend = 0f;
@@ -29,8 +28,7 @@ public class ClapController : MonoBehaviour
     {
         cooldownTimer -= Time.deltaTime;
 
-        // WASD player claps with C, Arrow player claps with M (avoids movement key conflicts)
-        bool clapPressed = controller.controls == ControlScheme.WASD
+        bool clapPressed = humanPlayer.controls == ControlScheme.WASD
             ? Input.GetKeyDown(KeyCode.C)
             : Input.GetKeyDown(KeyCode.M);
 
@@ -47,8 +45,8 @@ public class ClapController : MonoBehaviour
         audioSource.pitch = 1f;
         audioSource.PlayOneShot(audioSource.clip);
 
-        GameObject kanamachi = GameManager.Instance != null ? GameManager.Instance.GetKanamachiPlayer() : null;
-        if (kanamachi != null && kanamachi != gameObject)
+        Player kanamachi = GameManager.Instance != null ? GameManager.Instance.GetKanamachiPlayer() : null;
+        if (kanamachi != null && kanamachi != humanPlayer)
         {
             float dist = Vector2.Distance(transform.position, kanamachi.transform.position);
             if (dist <= teaseRiskRadius)
@@ -63,7 +61,6 @@ public class ClapController : MonoBehaviour
         }
     }
 
-    // Generates a short white-noise burst that sounds like a clap, so no audio file is needed.
     private AudioClip GenerateClapClip()
     {
         int sampleRate = 44100;

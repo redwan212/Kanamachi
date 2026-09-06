@@ -6,7 +6,7 @@ public class GameManager : MonoBehaviour
     public static GameManager Instance;
 
     [Header("Players (assign in Inspector)")]
-    public List<GameObject> players = new List<GameObject>();
+    public List<Player> players = new List<Player>();
 
     [Header("Spawn Points (must match players count)")]
     public Vector2[] spawnPoints;
@@ -18,11 +18,10 @@ public class GameManager : MonoBehaviour
     public int correctGuessPoints = 10;
     public int wrongGuessPenalty = 5;
 
-    private GameObject kanamachiPlayer;
-    private GameObject pendingCaughtPlayer;
+    private Player kanamachiPlayer;
+    private Player pendingCaughtPlayer;
 
     // True while waiting for the Kanamachi to guess who they caught.
-    // Player movement is frozen during this phase (see PlayerController).
     public bool IsGuessingPhase { get; private set; }
 
     void Awake()
@@ -38,7 +37,7 @@ public class GameManager : MonoBehaviour
 
     void Update()
     {
-        if (IsGuessingPhase) return; // frozen until a guess is submitted
+        if (IsGuessingPhase) return;
         if (kanamachiPlayer == null || players.Count < 2) return;
 
         foreach (var player in players)
@@ -57,40 +56,43 @@ public class GameManager : MonoBehaviour
     void StartNewRound()
     {
         int index = Random.Range(0, players.Count);
-        kanamachiPlayer = players[index];
-
-        Debug.Log($"[GameManager] {kanamachiPlayer.name} is now the Kanamachi (blind bee).");
-
+        SetKanamachi(players[index]);
         ResetPositions();
     }
 
-    // Instead of immediately swapping roles, freeze the game and ask the
-    // Kanamachi to identify who they caught (Phase 2: Identity Guessing).
-    void StartGuessPhase(GameObject caughtPlayer)
+    // Demonstrates encapsulation: blindfolded state is set through a method,
+    // never directly from outside.
+    void SetKanamachi(Player player)
+    {
+        if (kanamachiPlayer != null) kanamachiPlayer.SetBlindfolded(false);
+
+        kanamachiPlayer = player;
+        kanamachiPlayer.SetBlindfolded(true);
+
+        Debug.Log($"[GameManager] {kanamachiPlayer.name} is now the Kanamachi (blind bee).");
+    }
+
+    void StartGuessPhase(Player caughtPlayer)
     {
         IsGuessingPhase = true;
         pendingCaughtPlayer = caughtPlayer;
         Debug.Log($"[GameManager] {kanamachiPlayer.name} caught someone! Time to guess who it is.");
     }
 
-    // Called by the OnGUI buttons below when the Kanamachi picks a name.
-    public void SubmitGuess(GameObject guessedPlayer)
+    public void SubmitGuess(Player guessedPlayer)
     {
         bool correct = guessedPlayer == pendingCaughtPlayer;
 
         if (correct)
         {
             Debug.Log($"[GameManager] Correct! It was {pendingCaughtPlayer.name}.");
-            ScoreManager.Instance?.AddScore(kanamachiPlayer, correctGuessPoints);
-
-            kanamachiPlayer = pendingCaughtPlayer;
-            Debug.Log($"[GameManager] {kanamachiPlayer.name} is now the new Kanamachi.");
+            ScoreManager.Instance?.AddScore(kanamachiPlayer.gameObject, correctGuessPoints);
+            SetKanamachi(pendingCaughtPlayer);
         }
         else
         {
             Debug.Log($"[GameManager] Wrong guess! It was actually {pendingCaughtPlayer.name}, not {guessedPlayer.name}.");
-            ScoreManager.Instance?.AddScore(kanamachiPlayer, -wrongGuessPenalty);
-            // Wrong guess: Kanamachi stays the same, caught player gets away.
+            ScoreManager.Instance?.AddScore(kanamachiPlayer.gameObject, -wrongGuessPenalty);
         }
 
         IsGuessingPhase = false;
@@ -107,12 +109,12 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    public bool IsKanamachi(GameObject player)
+    public bool IsKanamachi(Player player)
     {
         return player == kanamachiPlayer;
     }
 
-    public GameObject GetKanamachiPlayer()
+    public Player GetKanamachiPlayer()
     {
         return kanamachiPlayer;
     }
