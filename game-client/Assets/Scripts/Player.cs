@@ -56,8 +56,9 @@ public abstract class Player : MonoBehaviour
 
     void Update()
     {
-        // Freeze movement while the Kanamachi is guessing who they caught.
-        if (GameManager.Instance != null && GameManager.Instance.IsGuessingPhase)
+        // Freeze movement while the Kanamachi is guessing who they caught,
+        // and once the match has finished.
+        if (GameManager.Instance != null && GameManager.Instance.IsInputFrozen)
         {
             moveInput = Vector2.zero;
             return;

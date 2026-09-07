@@ -10,12 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74444abb065110d41a48cb65bf94cbc6, type: 3}
-  m_Name: NewCharacter 3
+  m_Name: Opu
   m_EditorClassIdentifier: Assembly-CSharp::Character
-  characterName: Fahim
-  description: ' The fastest runner in the para.'
+  characterName: Opu
+  description: Never plays the same way twice - nobody can predict his next move.
   avatarSprite: {fileID: 0}
-  spriteColor: {r: 0, g: 1, b: 1, a: 1}
-  moveSpeedMultiplier: 1.05
-  footstepPitchOffset: 0
-  personality: Cheerful and fast
+  spriteColor: {r: 1, g: 1, b: 1, a: 1}
+  moveSpeedMultiplier: 1
+  footstepPitchOffset: -0.05
+  personality: Unpredictable and playful

@@ -4,6 +4,8 @@ using UnityEngine;
 // No expensive cutscenes needed - just readable text shown briefly.
 public class StoryManager : MonoBehaviour
 {
+    public static StoryManager Instance;
+
     [System.Serializable]
     public class ChapterStory
     {
@@ -22,6 +24,15 @@ public class StoryManager : MonoBehaviour
     private string currentText;
     private float displayTimer;
     private bool isShowing;
+
+    // The GameManager freezes the round while a chapter is on screen,
+    // so players cannot be caught behind the narrative text.
+    public bool IsShowing { get { return isShowing; } }
+
+    void Awake()
+    {
+        if (Instance == null) Instance = this;
+    }
 
     // Call this when a new chapter/level begins, e.g. storyManager.ShowChapter(0);
     public void ShowChapter(int chapterIndex)

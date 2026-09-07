@@ -4,6 +4,8 @@ using UnityEngine;
 // how close the nearest non-Kanamachi player is.
 public class SoundCueManager : MonoBehaviour
 {
+    public static SoundCueManager Instance;
+
     [Header("Footstep Timing")]
     public float minInterval = 0.25f;
     public float maxInterval = 1.2f;
@@ -17,14 +19,35 @@ public class SoundCueManager : MonoBehaviour
     private SoundCueLevel currentLevel = SoundCueLevel.Quiet;
     private Player closestPlayer;
 
+    // Random events (thunder, crowd noise, firecrackers) temporarily scale
+    // how loud the footstep cues come through. 1 = no event active.
+    public float EventVolumeMultiplier { get; set; } = 1f;
+
     void Awake()
     {
+        if (Instance == null) Instance = this;
+
         audioSource = gameObject.AddComponent<AudioSource>();
         audioSource.playOnAwake = false;
         audioSource.spatialBlend = 0f;
         audioSource.clip = GenerateFootstepClip();
 
+        // Fallback until LevelManager loads a level and calls
+        // RefreshSoundCueSystem() with that level's own behavior.
         cueSystem = new NormalSoundCueSystem();
+    }
+
+    // Asks the active Level which sound cue behavior to use. The Storm Night
+    // level returns a StormSoundCueSystem, which makes cues unreliable;
+    // every other level returns the normal one. Called by LevelManager
+    // whenever a level loads.
+    public void RefreshSoundCueSystem()
+    {
+        Level level = LevelManager.Instance != null ? LevelManager.Instance.CurrentLevel : null;
+
+        cueSystem = level != null ? level.GetSoundCueSystem() : new NormalSoundCueSystem();
+
+        Debug.Log($"[SoundCueManager] Sound cue behavior is now {cueSystem.GetType().Name}.");
     }
 
     void Update()
@@ -59,7 +82,7 @@ public class SoundCueManager : MonoBehaviour
 
     private void PlayFootstep()
     {
-        audioSource.volume = cueSystem.GetVolumeForLevel(currentLevel);
+        audioSource.volume = Mathf.Clamp01(cueSystem.GetVolumeForLevel(currentLevel) * EventVolumeMultiplier);
 
         // Each character shifts the footstep pitch slightly. This is the
         // subtle identity clue from spec Section 18 - the Kanamachi can learn
@@ -120,8 +143,11 @@ public class SoundCueManager : MonoBehaviour
             ? closestPlayer.character.footstepPitchOffset
             : 0f;
 
-        GUI.Label(new Rect(10, 40, 600, 30),
-            $"Sound Cue: {currentLevel}  |  Nearest: {who}  |  Pitch: {audioSource.pitch:F2} (offset {offset:+0.00;-0.00;0.00})",
+        string systemName = cueSystem != null ? cueSystem.GetType().Name : "-";
+
+        GUI.Label(new Rect(10, 40, 800, 30),
+            $"Sound Cue: {currentLevel}  |  Nearest: {who}  |  Pitch: {audioSource.pitch:F2} " +
+            $"(offset {offset:+0.00;-0.00;0.00})  |  {systemName}  |  Event x{EventVolumeMultiplier:F2}",
             style);
     }
 }

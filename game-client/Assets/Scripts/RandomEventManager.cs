@@ -7,6 +7,14 @@ public class RandomEventManager : MonoBehaviour
 {
     public enum EventType { Firecracker, Thunder, CrowdNoise, MelaAnnouncement, StrongWind }
 
+    [Header("Gameplay Effect")]
+    [Tooltip("How much each event scales footstep cue loudness while it is active.")]
+    public float firecrackerMultiplier = 1.5f;
+    public float thunderMultiplier = 0.4f;
+    public float crowdNoiseMultiplier = 0.6f;
+    public float melaAnnouncementMultiplier = 0.7f;
+    public float strongWindMultiplier = 0.6f;
+
     [Header("Timing")]
     public float minTimeBetweenEvents = 15f;
     public float maxTimeBetweenEvents = 30f;
@@ -53,14 +61,48 @@ public class RandomEventManager : MonoBehaviour
         eventActive = true;
         remainingEventTime = eventDuration;
 
-        Debug.Log($"[RandomEventManager] Event triggered: {currentEvent}");
+        // Events do not just print a message - they temporarily change how
+        // well the Kanamachi can hear footsteps (spec Section 27).
+        ApplyEventEffect(currentEvent);
+
+        Debug.Log($"[RandomEventManager] Event triggered: {currentEvent} " +
+                  $"(cue volume x{GetVolumeMultiplier(currentEvent):F2})");
     }
 
     private void EndEvent()
     {
         Debug.Log($"[RandomEventManager] Event ended: {currentEvent}");
+
+        // Restore normal hearing.
+        if (SoundCueManager.Instance != null)
+        {
+            SoundCueManager.Instance.EventVolumeMultiplier = 1f;
+        }
+
         eventActive = false;
         ScheduleNextEvent();
+    }
+
+    private void ApplyEventEffect(EventType type)
+    {
+        if (SoundCueManager.Instance == null) return;
+
+        SoundCueManager.Instance.EventVolumeMultiplier = GetVolumeMultiplier(type);
+    }
+
+    // Thunder, wind and crowd noise drown footsteps out; a firecracker
+    // startles everyone and makes the next few steps easier to hear.
+    private float GetVolumeMultiplier(EventType type)
+    {
+        switch (type)
+        {
+            case EventType.Firecracker: return firecrackerMultiplier;
+            case EventType.Thunder: return thunderMultiplier;
+            case EventType.CrowdNoise: return crowdNoiseMultiplier;
+            case EventType.MelaAnnouncement: return melaAnnouncementMultiplier;
+            case EventType.StrongWind: return strongWindMultiplier;
+            default: return 1f;
+        }
     }
 
     void OnGUI()

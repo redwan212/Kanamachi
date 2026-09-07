@@ -10,12 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74444abb065110d41a48cb65bf94cbc6, type: 3}
-  m_Name: NewCharacter
+  m_Name: Riad
   m_EditorClassIdentifier: Assembly-CSharp::Character
-  characterName: Sammim
-  description: A brave and energetic player who never backs down.
+  characterName: Riad
+  description: A calm, steady kid who never rushes into trouble.
   avatarSprite: {fileID: 0}
-  spriteColor: {r: 1, g: 0, b: 1, a: 1}
-  moveSpeedMultiplier: 1
-  footstepPitchOffset: 0
-  personality: Bold and energetic
+  spriteColor: {r: 0, g: 1, b: 0, a: 1}
+  moveSpeedMultiplier: 0.95
+  footstepPitchOffset: -0.1
+  personality: Calm and careful
