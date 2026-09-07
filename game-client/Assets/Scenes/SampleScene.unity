@@ -187,22 +187,15 @@ PrefabInstance:
       propertyPath: m_Color.r
       value: 0.282353
       objectReference: {fileID: 0}
-    m_RemovedComponents: []
+    m_RemovedComponents:
+    - {fileID: 4674758631018764164, guid: ffe69e3bed319a441bab5f41018b24aa, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 2051581173789620001, guid: ffe69e3bed319a441bab5f41018b24aa, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1048899762}
   m_SourcePrefab: {fileID: 100100000, guid: ffe69e3bed319a441bab5f41018b24aa, type: 3}
---- !u!114 &60879738 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 4674758631018764164, guid: ffe69e3bed319a441bab5f41018b24aa, type: 3}
-  m_PrefabInstance: {fileID: 60879737}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 97c31ff03d78bb747b3ed0d7ceb79686, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::AggressiveAI
 --- !u!114 &147149645 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 7516493845988723762, guid: c9339d6927c52794fa4a21236442eee8, type: 3}
@@ -930,7 +923,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 3, y: 0, z: 0}
-  m_LocalScale: {x: 2, y: 2, z: 1}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -1241,6 +1234,28 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 97ec2ced3ec435a45b444d8e36c64e6e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CourtyardLevel
+--- !u!1 &1048899755 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 2051581173789620001, guid: ffe69e3bed319a441bab5f41018b24aa, type: 3}
+  m_PrefabInstance: {fileID: 60879737}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1048899762
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1048899755}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dae535940d948f54aacca1f391022020, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CarefulAI
+  moveSpeed: 4
+  character: {fileID: 0}
+  directionChangeInterval: 2
+  cautionDistance: 5
+  moveSpeedMultiplier: 0.8
 --- !u!1001 &1172397321
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1363,8 +1378,8 @@ MonoBehaviour:
   - {fileID: 683065202}
   - {fileID: 251114644}
   - {fileID: 1172397323}
-  - {fileID: 60879738}
-  - {fileID: 1496761338}
+  - {fileID: 0}
+  - {fileID: 0}
   spawnPoints:
   - {x: -6, y: 3}
   - {x: 6, y: 3}
@@ -1372,7 +1387,7 @@ MonoBehaviour:
   - {x: 6, y: -3}
   - {x: 0, y: 4}
   - {x: 0, y: -4}
-  catchDistance: 2
+  catchDistance: 1
   correctGuessPoints: 10
   wrongGuessPenalty: 5
   roundStartDelay: 2
@@ -1819,22 +1834,15 @@ PrefabInstance:
       propertyPath: m_Color.r
       value: 1
       objectReference: {fileID: 0}
-    m_RemovedComponents: []
+    m_RemovedComponents:
+    - {fileID: 4674758631018764164, guid: ffe69e3bed319a441bab5f41018b24aa, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 2051581173789620001, guid: ffe69e3bed319a441bab5f41018b24aa, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1768601847}
   m_SourcePrefab: {fileID: 100100000, guid: ffe69e3bed319a441bab5f41018b24aa, type: 3}
---- !u!114 &1496761338 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 4674758631018764164, guid: ffe69e3bed319a441bab5f41018b24aa, type: 3}
-  m_PrefabInstance: {fileID: 1496761337}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 97c31ff03d78bb747b3ed0d7ceb79686, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::AggressiveAI
 --- !u!1 &1690343695
 GameObject:
   m_ObjectHideFlags: 0
@@ -1879,6 +1887,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2ecb7c0ab82237244a6673eec587267a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StormNightLevel
+--- !u!1 &1768601840 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 2051581173789620001, guid: ffe69e3bed319a441bab5f41018b24aa, type: 3}
+  m_PrefabInstance: {fileID: 1496761337}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1768601847
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1768601840}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ab469a014bf76a54b8c9713f19b6684c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RandomAI
+  moveSpeed: 4
+  character: {fileID: 0}
+  directionChangeInterval: 2
 --- !u!1 &1928212344
 GameObject:
   m_ObjectHideFlags: 0
@@ -1939,6 +1967,14 @@ PrefabInstance:
       propertyPath: character
       value: 
       objectReference: {fileID: 11400000, guid: c27699a5036af7d468a06315d81d2066, type: 2}
+    - target: {fileID: 8850161896828366695, guid: c9339d6927c52794fa4a21236442eee8, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8850161896828366695, guid: c9339d6927c52794fa4a21236442eee8, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 8850161896828366695, guid: c9339d6927c52794fa4a21236442eee8, type: 3}
       propertyPath: m_LocalPosition.x
       value: -3
