@@ -8,6 +8,9 @@ public abstract class Player : MonoBehaviour
     [Header("Movement")]
     public float moveSpeed = 4f;
 
+    [Header("Character (optional)")]
+    public Character character;
+
     protected Rigidbody2D rb;
     protected Vector2 moveInput;
 
@@ -17,6 +20,38 @@ public abstract class Player : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         rb.gravityScale = 0f;
+
+        ApplyCharacterProfile();
+    }
+
+    // The name shown in the UI, logs, and the guessing screen.
+    // Falls back to the GameObject name so a Player without an assigned
+    // Character still displays something sensible instead of blank text.
+    public string DisplayName
+    {
+        get
+        {
+            if (character != null && !string.IsNullOrEmpty(character.characterName))
+                return character.characterName;
+            return gameObject.name;
+        }
+    }
+
+    private void ApplyCharacterProfile()
+    {
+        if (character == null) return;
+
+        moveSpeed *= character.moveSpeedMultiplier;
+
+        SpriteRenderer sr = GetComponent<SpriteRenderer>();
+        if (sr != null)
+        {
+            sr.color = character.spriteColor;
+            if (character.avatarSprite != null)
+            {
+                sr.sprite = character.avatarSprite;
+            }
+        }
     }
 
     void Update()

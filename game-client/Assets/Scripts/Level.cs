@@ -10,4 +10,8 @@ public abstract class Level : MonoBehaviour
     public abstract float GetAmbientNoise();
     public abstract int GetDifficulty();
     public abstract void ConfigureEnvironment();
+
+    // Lets each level swap in a different sound cue behavior -
+    // e.g. a storm level can make sound cues less reliable.
+    public abstract ISoundCueSystem GetSoundCueSystem();
 }

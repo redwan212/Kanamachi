@@ -19,12 +19,20 @@ public class ScoreManager : MonoBehaviour
     {
         if (!scores.ContainsKey(player)) scores[player] = 0;
         scores[player] += amount;
-        Debug.Log($"[ScoreManager] {player.name} score: {scores[player]}");
+        Debug.Log($"[ScoreManager] {NameOf(player)} score: {scores[player]}");
     }
 
     public int GetScore(GameObject player)
     {
         return scores.ContainsKey(player) ? scores[player] : 0;
+    }
+
+    // Prefer the assigned Character's name over the raw GameObject name,
+    // so the scoreboard reads "Rafi: 15 pts" instead of "Player1: 15 pts".
+    private string NameOf(GameObject go)
+    {
+        Player p = go.GetComponent<Player>();
+        return p != null ? p.DisplayName : go.name;
     }
 
     void OnGUI()
@@ -36,7 +44,7 @@ public class ScoreManager : MonoBehaviour
         int y = 70;
         foreach (var kvp in scores)
         {
-            GUI.Label(new Rect(10, y, 300, 25), $"{kvp.Key.name}: {kvp.Value} pts", style);
+            GUI.Label(new Rect(10, y, 300, 25), $"{NameOf(kvp.Key)}: {kvp.Value} pts", style);
             y += 20;
         }
     }

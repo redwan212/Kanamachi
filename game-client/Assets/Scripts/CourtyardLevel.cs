@@ -24,4 +24,9 @@ public class CourtyardLevel : Level
     {
         Debug.Log("[CourtyardLevel] Environment configured: calm afternoon courtyard.");
     }
+
+    public override ISoundCueSystem GetSoundCueSystem()
+    {
+        return new NormalSoundCueSystem();
+    }
 }

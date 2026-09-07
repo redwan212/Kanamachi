@@ -69,14 +69,14 @@ public class GameManager : MonoBehaviour
         kanamachiPlayer = player;
         kanamachiPlayer.SetBlindfolded(true);
 
-        Debug.Log($"[GameManager] {kanamachiPlayer.name} is now the Kanamachi (blind bee).");
+        Debug.Log($"[GameManager] {kanamachiPlayer.DisplayName} is now the Kanamachi (blind bee).");
     }
 
     void StartGuessPhase(Player caughtPlayer)
     {
         IsGuessingPhase = true;
         pendingCaughtPlayer = caughtPlayer;
-        Debug.Log($"[GameManager] {kanamachiPlayer.name} caught someone! Time to guess who it is.");
+        Debug.Log($"[GameManager] {kanamachiPlayer.DisplayName} caught someone! Time to guess who it is.");
     }
 
     public void SubmitGuess(Player guessedPlayer)
@@ -85,13 +85,13 @@ public class GameManager : MonoBehaviour
 
         if (correct)
         {
-            Debug.Log($"[GameManager] Correct! It was {pendingCaughtPlayer.name}.");
+            Debug.Log($"[GameManager] Correct! It was {pendingCaughtPlayer.DisplayName}.");
             ScoreManager.Instance?.AddScore(kanamachiPlayer.gameObject, correctGuessPoints);
             SetKanamachi(pendingCaughtPlayer);
         }
         else
         {
-            Debug.Log($"[GameManager] Wrong guess! It was actually {pendingCaughtPlayer.name}, not {guessedPlayer.name}.");
+            Debug.Log($"[GameManager] Wrong guess! It was actually {pendingCaughtPlayer.DisplayName}, not {guessedPlayer.DisplayName}.");
             ScoreManager.Instance?.AddScore(kanamachiPlayer.gameObject, -wrongGuessPenalty);
         }
 
@@ -126,7 +126,7 @@ public class GameManager : MonoBehaviour
         GUIStyle labelStyle = new GUIStyle();
         labelStyle.fontSize = 24;
         labelStyle.normal.textColor = Color.yellow;
-        GUI.Label(new Rect(10, 10, 400, 40), $"Kanamachi: {kanamachiPlayer.name}", labelStyle);
+        GUI.Label(new Rect(10, 10, 400, 40), $"Kanamachi: {kanamachiPlayer.DisplayName}", labelStyle);
 
         if (IsGuessingPhase)
         {
@@ -141,7 +141,7 @@ public class GameManager : MonoBehaviour
             {
                 if (player == kanamachiPlayer) continue;
 
-                if (GUI.Button(new Rect(Screen.width / 2f - 75, buttonY, 150, 40), player.name))
+                if (GUI.Button(new Rect(Screen.width / 2f - 75, buttonY, 150, 40), player.DisplayName))
                 {
                     SubmitGuess(player);
                 }

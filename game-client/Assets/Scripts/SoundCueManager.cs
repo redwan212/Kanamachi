@@ -15,6 +15,7 @@ public class SoundCueManager : MonoBehaviour
     private ISoundCueSystem cueSystem;
     private float timer;
     private SoundCueLevel currentLevel = SoundCueLevel.Quiet;
+    private Player closestPlayer;
 
     void Awake()
     {
@@ -34,11 +35,16 @@ public class SoundCueManager : MonoBehaviour
         if (kanamachi == null) return;
 
         float closestDistance = float.MaxValue;
+        closestPlayer = null;
         foreach (var player in GameManager.Instance.players)
         {
             if (player == kanamachi) continue;
             float dist = Vector2.Distance(kanamachi.transform.position, player.transform.position);
-            if (dist < closestDistance) closestDistance = dist;
+            if (dist < closestDistance)
+            {
+                closestDistance = dist;
+                closestPlayer = player;
+            }
         }
 
         currentLevel = cueSystem.GetCueLevel(closestDistance);
@@ -54,7 +60,15 @@ public class SoundCueManager : MonoBehaviour
     private void PlayFootstep()
     {
         audioSource.volume = cueSystem.GetVolumeForLevel(currentLevel);
-        audioSource.pitch = cueSystem.GetPitchForLevel(currentLevel);
+
+        // Each character shifts the footstep pitch slightly. This is the
+        // subtle identity clue from spec Section 18 - the Kanamachi can learn
+        // to recognise who is nearby by how their footsteps sound.
+        float pitchOffset = (closestPlayer != null && closestPlayer.character != null)
+            ? closestPlayer.character.footstepPitchOffset
+            : 0f;
+
+        audioSource.pitch = cueSystem.GetPitchForLevel(currentLevel) + pitchOffset;
         audioSource.PlayOneShot(audioSource.clip);
     }
 
@@ -96,6 +110,18 @@ public class SoundCueManager : MonoBehaviour
         GUIStyle style = new GUIStyle();
         style.fontSize = 18;
         style.normal.textColor = Color.cyan;
-        GUI.Label(new Rect(10, 40, 400, 30), $"Sound Cue: {currentLevel}", style);
+
+        // TESTING ONLY: shows which player is nearest and what pitch their
+        // footstep is playing at, so the per-character pitch offset can be
+        // verified. Turn "Show Debug Label" off in the Inspector before demoing -
+        // it reveals the identity the Kanamachi is supposed to guess.
+        string who = closestPlayer != null ? closestPlayer.DisplayName : "-";
+        float offset = (closestPlayer != null && closestPlayer.character != null)
+            ? closestPlayer.character.footstepPitchOffset
+            : 0f;
+
+        GUI.Label(new Rect(10, 40, 600, 30),
+            $"Sound Cue: {currentLevel}  |  Nearest: {who}  |  Pitch: {audioSource.pitch:F2} (offset {offset:+0.00;-0.00;0.00})",
+            style);
     }
 }

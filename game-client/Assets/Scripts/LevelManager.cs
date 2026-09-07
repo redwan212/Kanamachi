@@ -6,8 +6,15 @@ using UnityEngine;
 // will behave differently once more Level subclasses exist (Phase 6).
 public class LevelManager : MonoBehaviour
 {
+    public static LevelManager Instance;
+
     [Header("Assign the active Level component here")]
     public Level currentLevel;
+
+    void Awake()
+    {
+        if (Instance == null) Instance = this;
+    }
 
     void Start()
     {
