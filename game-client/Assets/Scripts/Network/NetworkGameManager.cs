@@ -28,6 +28,13 @@ public class NetworkGameManager : MonoBehaviour
         new Vector2(-6f, -3f), new Vector2(6f, -3f)
     };
 
+    [Header("Catching")]
+    [Tooltip("Key the Kanamachi presses to try to grab whoever is nearest.")]
+    public KeyCode catchKey = KeyCode.Space;
+
+    [Tooltip("Only used to pick the nearest target. The server does the real range check.")]
+    public float catchReach = 2f;
+
     [Header("References")]
     public NetworkVisionController visionController;
 
@@ -42,13 +49,18 @@ public class NetworkGameManager : MonoBehaviour
     private int currentRound;
     private bool matchStarted;
 
+    private bool isGuessing;
+    private string caughtUserId;
+    private string lastMessage;
+    private float lastMessageTime;
+
     public bool LocalPlayerIsKanamachi
     {
         get { return !string.IsNullOrEmpty(kanamachiUserId) && kanamachiUserId == SessionData.UserId; }
     }
 
-    // Nothing freezes movement yet - catching and guessing come next.
-    public bool IsInputFrozen { get { return false; } }
+    // Nobody moves while the Kanamachi is deciding who they caught.
+    public bool IsInputFrozen { get { return isGuessing; } }
 
     void Awake()
     {
@@ -69,6 +81,52 @@ public class NetworkGameManager : MonoBehaviour
         NetworkClient.Instance.OnPlayerMoved += HandlePlayerMoved;
         NetworkClient.Instance.OnGameStarted += HandleGameStarted;
         NetworkClient.Instance.OnKanamachiChanged += HandleKanamachiChanged;
+        NetworkClient.Instance.OnCatchSuccess += HandleCatchSuccess;
+        NetworkClient.Instance.OnCatchRejected += HandleCatchRejected;
+        NetworkClient.Instance.OnGuessResult += HandleGuessResult;
+    }
+
+    void Update()
+    {
+        // Only the blindfolded player can try to catch, and only while the
+        // match is running and no guess is pending.
+        if (!matchStarted || isGuessing) return;
+        if (!LocalPlayerIsKanamachi || localPlayer == null) return;
+
+        if (Input.GetKeyDown(catchKey))
+        {
+            TryCatch();
+        }
+    }
+
+    private void TryCatch()
+    {
+        Player nearest = null;
+        float nearestDistance = float.MaxValue;
+
+        foreach (var pair in playersByUserId)
+        {
+            if (pair.Key == SessionData.UserId || pair.Value == null) continue;
+
+            float distance = Vector2.Distance(
+                localPlayer.transform.position, pair.Value.transform.position);
+
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+                nearest = pair.Value;
+            }
+        }
+
+        if (nearest == null)
+        {
+            ShowMessage("Nobody else is here yet.");
+            return;
+        }
+
+        // Sent even when it looks too far - the server decides, not us.
+        string targetId = UserIdOf(nearest);
+        NetworkClient.Instance.SendCatchAttempt(targetId);
     }
 
     void OnDestroy()
@@ -81,6 +139,9 @@ public class NetworkGameManager : MonoBehaviour
         NetworkClient.Instance.OnPlayerMoved -= HandlePlayerMoved;
         NetworkClient.Instance.OnGameStarted -= HandleGameStarted;
         NetworkClient.Instance.OnKanamachiChanged -= HandleKanamachiChanged;
+        NetworkClient.Instance.OnCatchSuccess -= HandleCatchSuccess;
+        NetworkClient.Instance.OnCatchRejected -= HandleCatchRejected;
+        NetworkClient.Instance.OnGuessResult -= HandleGuessResult;
     }
 
     // ---------- Server events ----------
@@ -160,6 +221,34 @@ public class NetworkGameManager : MonoBehaviour
         {
             visionController.Refresh(localPlayer, LocalPlayerIsKanamachi);
         }
+    }
+
+    private void HandleCatchSuccess(string kanamachiId, string caughtPlayerId)
+    {
+        isGuessing = true;
+        caughtUserId = caughtPlayerId;
+
+        Debug.Log($"[NetworkGameManager] {NameOf(kanamachiId)} caught somebody.");
+    }
+
+    private void HandleCatchRejected(string reason)
+    {
+        ShowMessage(reason == "too_far" ? "Too far away." : "You are not the Kanamachi.");
+    }
+
+    private void HandleGuessResult(bool correct, string newKanamachiId)
+    {
+        isGuessing = false;
+
+        string caughtName = NameOf(caughtUserId);
+        caughtUserId = null;
+
+        ShowMessage(correct
+            ? $"Correct - it was {caughtName}."
+            : $"Wrong guess. It was {caughtName}.");
+
+        // The server may have handed the blindfold to somebody new.
+        HandleKanamachiChanged(newKanamachiId);
     }
 
     // ---------- Spawning ----------
@@ -253,6 +342,22 @@ public class NetworkGameManager : MonoBehaviour
 
     // ---------- Helpers ----------
 
+    private string UserIdOf(Player player)
+    {
+        foreach (var pair in playersByUserId)
+        {
+            if (pair.Value == player) return pair.Key;
+        }
+        return null;
+    }
+
+    private void ShowMessage(string message)
+    {
+        lastMessage = message;
+        lastMessageTime = Time.time;
+        Debug.Log($"[NetworkGameManager] {message}");
+    }
+
     private string NameOf(string userId)
     {
         if (string.IsNullOrEmpty(userId)) return "nobody";
@@ -270,26 +375,115 @@ public class NetworkGameManager : MonoBehaviour
     {
         if (!showHud) return;
 
-        GUIStyle style = new GUIStyle();
-        style.fontSize = 18;
-        style.normal.textColor = Color.yellow;
+        DrawHud();
 
-        float x = Screen.width - 330f;
+        // Only the Kanamachi picks - everyone else waits and watches.
+        if (isGuessing && LocalPlayerIsKanamachi)
+        {
+            DrawGuessButtons();
+        }
+        else if (isGuessing)
+        {
+            GUIStyle waiting = new GUIStyle();
+            waiting.fontSize = 20;
+            waiting.alignment = TextAnchor.MiddleCenter;
+            waiting.normal.textColor = Color.white;
+            GUI.Label(new Rect(Screen.width / 2f - 200, Screen.height / 2f - 20, 400, 30),
+                "The Kanamachi is guessing...", waiting);
+        }
+    }
 
-        string you = localPlayer != null ? localPlayer.DisplayName : "(not spawned)";
-        GUI.Label(new Rect(x, 10, 320, 26), $"You: {you}", style);
+    private void DrawHud()
+    {
+        GUIStyle title = new GUIStyle();
+        title.fontSize = 18;
+        title.normal.textColor = Color.yellow;
 
         GUIStyle small = new GUIStyle();
         small.fontSize = 15;
         small.normal.textColor = Color.white;
 
-        GUI.Label(new Rect(x, 38, 320, 24),
+        // Anchored with enough margin that long names are not clipped.
+        float width = 300f;
+        float x = Screen.width - width - 20f;
+        float y = 12f;
+
+        string you = localPlayer != null ? localPlayer.DisplayName : "(not spawned)";
+        GUI.Label(new Rect(x, y, width, 24), $"You: {you}", title);
+        y += 26f;
+
+        GUI.Label(new Rect(x, y, width, 22),
             matchStarted ? $"Round {currentRound}" : "Waiting for another player...", small);
+        y += 22f;
 
-        GUI.Label(new Rect(x, 60, 320, 24),
-            LocalPlayerIsKanamachi ? "You are the KANAMACHI - you cannot see."
-                                   : $"Kanamachi: {NameOf(kanamachiUserId)}", small);
+        GUI.Label(new Rect(x, y, width, 22),
+            LocalPlayerIsKanamachi ? "You are the KANAMACHI" : $"Kanamachi: {NameOf(kanamachiUserId)}", small);
+        y += 22f;
 
-        GUI.Label(new Rect(x, 82, 320, 24), $"Players here: {playersByUserId.Count}", small);
+        GUI.Label(new Rect(x, y, width, 22), $"In room: {playersByUserId.Count}", small);
+        y += 22f;
+
+        if (LocalPlayerIsKanamachi && matchStarted && !isGuessing)
+        {
+            GUI.Label(new Rect(x, y, width, 22), $"Press {catchKey} to grab someone", small);
+            y += 22f;
+        }
+
+        // Feedback such as "Too far away" fades after a few seconds.
+        if (!string.IsNullOrEmpty(lastMessage) && Time.time - lastMessageTime < 3f)
+        {
+            GUIStyle msg = new GUIStyle();
+            msg.fontSize = 16;
+            msg.normal.textColor = Color.cyan;
+            GUI.Label(new Rect(x, y + 6f, width, 40), lastMessage, msg);
+        }
+    }
+
+    private void DrawGuessButtons()
+    {
+        GUIStyle prompt = new GUIStyle();
+        prompt.fontSize = 22;
+        prompt.alignment = TextAnchor.MiddleCenter;
+        prompt.normal.textColor = Color.red;
+
+        const float buttonWidth = 150f;
+        const float buttonHeight = 40f;
+        const float gap = 12f;
+        const int columns = 2;
+
+        int count = 0;
+        foreach (var pair in playersByUserId)
+        {
+            if (pair.Key != SessionData.UserId && pair.Value != null) count++;
+        }
+
+        int rows = Mathf.Max(1, Mathf.CeilToInt(count / (float)columns));
+        float gridWidth = columns * buttonWidth + (columns - 1) * gap;
+        float gridHeight = rows * buttonHeight + (rows - 1) * gap;
+
+        float startX = Screen.width / 2f - gridWidth / 2f;
+        float startY = Screen.height / 2f - gridHeight / 2f;
+
+        GUI.Label(new Rect(Screen.width / 2f - 200, startY - 50, 400, 30),
+            "Who did you catch?", prompt);
+
+        int index = 0;
+        foreach (var pair in playersByUserId)
+        {
+            if (pair.Key == SessionData.UserId || pair.Value == null) continue;
+
+            int row = index / columns;
+            int column = index % columns;
+
+            float bx = startX + column * (buttonWidth + gap);
+            float by = startY + row * (buttonHeight + gap);
+
+            if (GUI.Button(new Rect(bx, by, buttonWidth, buttonHeight), pair.Value.DisplayName))
+            {
+                NetworkClient.Instance.SendGuess(pair.Key);
+            }
+
+            index++;
+        }
     }
 }
