@@ -37,7 +37,15 @@ public abstract class Player : MonoBehaviour
         }
     }
 
-    private void ApplyCharacterProfile()
+    // Network players are created at runtime, so their Character arrives
+    // after Awake() has already run. This lets it be applied afterwards.
+    public void ApplyCharacter(Character newCharacter)
+    {
+        character = newCharacter;
+        ApplyCharacterProfile();
+    }
+
+    protected void ApplyCharacterProfile()
     {
         if (character == null) return;
 
@@ -56,9 +64,10 @@ public abstract class Player : MonoBehaviour
 
     void Update()
     {
-        // Freeze movement while the Kanamachi is guessing who they caught,
-        // and once the match has finished.
-        if (GameManager.Instance != null && GameManager.Instance.IsInputFrozen)
+        // Freeze movement while a guess is pending or the match is over.
+        // In local mode that decision comes from GameManager; in an online
+        // match it comes from NetworkGameManager.
+        if (IsInputFrozen())
         {
             moveInput = Vector2.zero;
             return;
@@ -70,6 +79,13 @@ public abstract class Player : MonoBehaviour
     protected virtual void FixedUpdate()
     {
         rb.MovePosition(rb.position + moveInput * moveSpeed * Time.fixedDeltaTime);
+    }
+
+    private bool IsInputFrozen()
+    {
+        if (GameManager.Instance != null && GameManager.Instance.IsInputFrozen) return true;
+        if (NetworkGameManager.Instance != null && NetworkGameManager.Instance.IsInputFrozen) return true;
+        return false;
     }
 
     // Each concrete player type decides HOW moveInput gets set:
