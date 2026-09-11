@@ -35,6 +35,13 @@ public class NetworkGameManager : MonoBehaviour
     [Tooltip("Only used to pick the nearest target. The server does the real range check.")]
     public float catchReach = 2f;
 
+    [Header("Levels and story")]
+    [Tooltip("Drives the four levels, their sound cue behaviour and their story chapters.")]
+    public LevelManager levelManager;
+
+    [Tooltip("Rounds played on each level before moving to the next.")]
+    public int roundsPerLevel = 3;
+
     [Header("References")]
     public NetworkVisionController visionController;
 
@@ -49,6 +56,11 @@ public class NetworkGameManager : MonoBehaviour
     private int currentRound;
     private bool matchStarted;
 
+    private int roundsPlayedInLevel;
+    private readonly Dictionary<string, int> scores = new Dictionary<string, int>();
+    private string leadingUserId;
+    private bool matchOver;
+    private string winnerUserId;
     private bool isGuessing;
     private string caughtUserId;
     private string lastMessage;
@@ -59,8 +71,30 @@ public class NetworkGameManager : MonoBehaviour
         get { return !string.IsNullOrEmpty(kanamachiUserId) && kanamachiUserId == SessionData.UserId; }
     }
 
-    // Nobody moves while the Kanamachi is deciding who they caught.
-    public bool IsInputFrozen { get { return isGuessing; } }
+    // Nobody moves while the Kanamachi is deciding who they caught, or
+    // while a story chapter is on screen between levels.
+    public bool IsInputFrozen
+    {
+        get
+        {
+            if (isGuessing || matchOver) return true;
+            if (StoryManager.Instance != null && StoryManager.Instance.IsShowing) return true;
+            return false;
+        }
+    }
+
+    // SoundCueManager asks these so it can work in either mode.
+    public Player KanamachiPlayer
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(kanamachiUserId)) return null;
+            playersByUserId.TryGetValue(kanamachiUserId, out Player p);
+            return p;
+        }
+    }
+
+    public IEnumerable<Player> AllPlayers { get { return playersByUserId.Values; } }
 
     void Awake()
     {
@@ -84,6 +118,8 @@ public class NetworkGameManager : MonoBehaviour
         NetworkClient.Instance.OnCatchSuccess += HandleCatchSuccess;
         NetworkClient.Instance.OnCatchRejected += HandleCatchRejected;
         NetworkClient.Instance.OnGuessResult += HandleGuessResult;
+        NetworkClient.Instance.OnScoreUpdate += HandleScoreUpdate;
+        NetworkClient.Instance.OnMatchOver += HandleMatchOver;
     }
 
     void Update()
@@ -142,6 +178,8 @@ public class NetworkGameManager : MonoBehaviour
         NetworkClient.Instance.OnCatchSuccess -= HandleCatchSuccess;
         NetworkClient.Instance.OnCatchRejected -= HandleCatchRejected;
         NetworkClient.Instance.OnGuessResult -= HandleGuessResult;
+        NetworkClient.Instance.OnScoreUpdate -= HandleScoreUpdate;
+        NetworkClient.Instance.OnMatchOver -= HandleMatchOver;
     }
 
     // ---------- Server events ----------
@@ -195,7 +233,16 @@ public class NetworkGameManager : MonoBehaviour
     {
         currentRound = round;
         matchStarted = true;
+        roundsPlayedInLevel = 0;
+
         Debug.Log($"[NetworkGameManager] Match started, round {round}.");
+
+        // The server does not track levels, so the client drives them. Every
+        // client counts the same broadcast results, so they stay in step.
+        if (levelManager != null)
+        {
+            levelManager.LoadLevel(0);
+        }
     }
 
     private void HandleKanamachiChanged(string newKanamachiId)
@@ -249,6 +296,58 @@ public class NetworkGameManager : MonoBehaviour
 
         // The server may have handed the blindfold to somebody new.
         HandleKanamachiChanged(newKanamachiId);
+
+        AdvanceRound();
+    }
+
+    // Scores are never calculated here - they arrive from the server, which
+    // is the only place that decides what a guess was worth.
+    private void HandleScoreUpdate(Dictionary<string, int> newScores, string leader)
+    {
+        scores.Clear();
+        foreach (var pair in newScores)
+        {
+            scores[pair.Key] = pair.Value;
+        }
+
+        leadingUserId = leader;
+    }
+
+    private void HandleMatchOver(Dictionary<string, int> finalScores, string winner)
+    {
+        HandleScoreUpdate(finalScores, winner);
+
+        matchOver = true;
+        winnerUserId = winner;
+        isGuessing = false;
+
+        // The blindfold comes off for everyone once the match ends.
+        if (visionController != null)
+        {
+            visionController.Refresh(localPlayer, false);
+        }
+
+        Debug.Log($"[NetworkGameManager] Match over. Winner: {NameOf(winner)}");
+    }
+
+    private void AdvanceRound()
+    {
+        currentRound++;
+        roundsPlayedInLevel++;
+
+        if (roundsPlayedInLevel < roundsPerLevel) return;
+        if (levelManager == null) return;
+
+        roundsPlayedInLevel = 0;
+
+        if (levelManager.AdvanceToNextLevel())
+        {
+            ShowMessage($"Moving on to {levelManager.GetCurrentLevelName()}.");
+        }
+        else
+        {
+            ShowMessage("That was the final level.");
+        }
     }
 
     // ---------- Spawning ----------
@@ -373,6 +472,12 @@ public class NetworkGameManager : MonoBehaviour
 
     void OnGUI()
     {
+        if (matchOver)
+        {
+            DrawMatchOverPanel();
+            return;
+        }
+
         if (!showHud) return;
 
         DrawHud();
@@ -390,6 +495,41 @@ public class NetworkGameManager : MonoBehaviour
             waiting.normal.textColor = Color.white;
             GUI.Label(new Rect(Screen.width / 2f - 200, Screen.height / 2f - 20, 400, 30),
                 "The Kanamachi is guessing...", waiting);
+        }
+    }
+
+    private void DrawMatchOverPanel()
+    {
+        GUI.Box(new Rect(0, 0, Screen.width, Screen.height), GUIContent.none);
+
+        GUIStyle titleStyle = new GUIStyle();
+        titleStyle.fontSize = 30;
+        titleStyle.alignment = TextAnchor.MiddleCenter;
+        titleStyle.normal.textColor = Color.yellow;
+
+        GUIStyle textStyle = new GUIStyle();
+        textStyle.fontSize = 18;
+        textStyle.alignment = TextAnchor.MiddleCenter;
+        textStyle.normal.textColor = Color.white;
+
+        float centerX = Screen.width / 2f - 250f;
+        float y = Screen.height / 2f - 160f;
+
+        GUI.Label(new Rect(centerX, y, 500, 40), "Match over", titleStyle);
+        y += 50f;
+
+        bool localWon = !string.IsNullOrEmpty(winnerUserId) && winnerUserId == SessionData.UserId;
+
+        GUI.Label(new Rect(centerX, y, 500, 26), localWon ? "You are the Kanamachi Master" : "Kanamachi Master", textStyle);
+        y += 30f;
+
+        GUI.Label(new Rect(centerX, y, 500, 40), NameOf(winnerUserId), titleStyle);
+        y += 56f;
+
+        foreach (var pair in scores)
+        {
+            GUI.Label(new Rect(centerX, y, 500, 24), $"{NameOf(pair.Key)}   {pair.Value} pts", textStyle);
+            y += 26f;
         }
     }
 
@@ -423,10 +563,37 @@ public class NetworkGameManager : MonoBehaviour
         GUI.Label(new Rect(x, y, width, 22), $"In room: {playersByUserId.Count}", small);
         y += 22f;
 
+        if (levelManager != null && levelManager.CurrentLevel != null)
+        {
+            GUI.Label(new Rect(x, y, width, 22),
+                $"{levelManager.GetCurrentLevelName()} - round {roundsPlayedInLevel + 1}/{roundsPerLevel}", small);
+            y += 22f;
+        }
+
         if (LocalPlayerIsKanamachi && matchStarted && !isGuessing)
         {
             GUI.Label(new Rect(x, y, width, 22), $"Press {catchKey} to grab someone", small);
             y += 22f;
+        }
+
+        if (scores.Count > 0)
+        {
+            y += 6f;
+            GUI.Label(new Rect(x, y, width, 22), "Scores", title);
+            y += 24f;
+
+            foreach (var pair in scores)
+            {
+                bool leading = pair.Key == leadingUserId;
+
+                GUIStyle row = new GUIStyle();
+                row.fontSize = 15;
+                row.normal.textColor = leading ? Color.yellow : Color.white;
+
+                string label = $"{NameOf(pair.Key)}: {pair.Value}" + (leading ? "  (leading)" : "");
+                GUI.Label(new Rect(x, y, width, 22), label, row);
+                y += 20f;
+            }
         }
 
         // Feedback such as "Too far away" fades after a few seconds.

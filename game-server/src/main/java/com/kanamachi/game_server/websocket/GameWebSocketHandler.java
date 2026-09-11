@@ -26,6 +26,13 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
     private static final double CATCH_RADIUS = 2.0;
 
+    private static final int CORRECT_GUESS_POINTS = 10;
+    private static final int WRONG_GUESS_PENALTY = 5;
+    private static final int ESCAPE_POINTS = 3;
+
+    // Four levels of three rounds each, matching the client's level pacing.
+    private static final int ROUNDS_PER_MATCH = 12;
+
     private final GameSessionManager gameSessionManager;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Random random = new Random();
@@ -131,14 +138,27 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
         boolean correct = actualCaughtPlayerId != null && actualCaughtPlayerId.equals(guessedPlayerId);
 
+        // Scoring happens here and nowhere else. The client is told the
+        // result, never asked for it.
         if (correct) {
+            gameSession.addScore(userId, CORRECT_GUESS_POINTS);
             gameSession.setKanamachiUserId(actualCaughtPlayerId);
+        } else {
+            gameSession.addScore(userId, -WRONG_GUESS_PENALTY);
+
+            // Staying hidden well enough to be misidentified is worth something.
+            if (actualCaughtPlayerId != null) {
+                gameSession.addScore(actualCaughtPlayerId, ESCAPE_POINTS);
+            }
         }
+
+        int round = gameSession.nextRound();
 
         broadcast(roomCode, msg(
                 "type", "GUESS_RESULT",
                 "correct", correct,
-                "newKanamachiId", gameSession.getKanamachiUserId()
+                "newKanamachiId", gameSession.getKanamachiUserId(),
+                "round", round
         ), null);
 
         if (correct) {
@@ -148,8 +168,39 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             ), null);
         }
 
+        broadcastScores(roomCode, gameSession);
+
         gameSession.setPendingCaughtPlayerId(null);
-        gameSession.setGameState(GameSession.GameState.PLAYING);
+
+        if (round > ROUNDS_PER_MATCH) {
+            finishMatch(roomCode, gameSession);
+        } else {
+            gameSession.setGameState(GameSession.GameState.PLAYING);
+        }
+    }
+
+    // The match is over once every level has been played out. The winner is
+    // decided here, from the server's own scores - a client cannot claim it.
+    private void finishMatch(String roomCode, GameSession gameSession) throws IOException {
+        gameSession.setGameState(GameSession.GameState.FINISHED);
+
+        String winnerId = gameSession.getLeadingUserId();
+
+        broadcast(roomCode, msg(
+                "type", "MATCH_OVER",
+                "winnerUserId", winnerId,
+                "scores", gameSession.getScoreboard(),
+                "rounds", gameSession.getCurrentRound() - 1
+        ), null);
+    }
+
+    // Sent after every scoring event so all clients show the same numbers.
+    private void broadcastScores(String roomCode, GameSession gameSession) throws IOException {
+        broadcast(roomCode, msg(
+                "type", "SCORE_UPDATE",
+                "scores", gameSession.getScoreboard(),
+                "leadingUserId", gameSession.getLeadingUserId()
+        ), null);
     }
 
     // Once at least 2 players are connected and no Kanamachi has been chosen
@@ -170,6 +221,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
         broadcast(roomCode, msg("type", "GAME_STARTED", "round", 1), null);
         broadcast(roomCode, msg("type", "KANAMACHI_CHANGED", "kanamachiId", kanamachiId), null);
+        broadcastScores(roomCode, gameSession);
     }
 
     @Override

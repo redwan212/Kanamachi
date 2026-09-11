@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NativeWebSocket;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -40,6 +41,12 @@ public class NetworkClient : MonoBehaviour
     public event Action<bool, string> OnGuessResult;        // correct, newKanamachiId
     public event Action<string> OnPlayerClapped;            // userId
     public event Action<string> OnServerError;              // message
+
+    // scores keyed by userId, plus whoever is currently ahead
+    public event Action<Dictionary<string, int>, string> OnScoreUpdate;
+
+    // final scores and the winner, once every round has been played
+    public event Action<Dictionary<string, int>, string> OnMatchOver;
 
     public bool IsConnected
     {
@@ -216,6 +223,20 @@ public class NetworkClient : MonoBehaviour
     {
         if (logMessages) Debug.Log($"[NetworkClient] <- {json}");
 
+        // JsonUtility has no support for dictionaries, so this one message
+        // type is picked apart manually before the usual parsing.
+        if (json.Contains("\"SCORE_UPDATE\""))
+        {
+            ParseScores(json, "leadingUserId", OnScoreUpdate);
+            return;
+        }
+
+        if (json.Contains("\"MATCH_OVER\""))
+        {
+            ParseScores(json, "winnerUserId", OnMatchOver);
+            return;
+        }
+
         ServerMessage message;
         try
         {
@@ -277,6 +298,55 @@ public class NetworkClient : MonoBehaviour
                 Debug.Log($"[NetworkClient] Unhandled message type: {message.type}");
                 break;
         }
+    }
+
+    // Both SCORE_UPDATE and MATCH_OVER carry a scores object plus one userId
+    // field, so the same reader serves both.
+    private void ParseScores(string json, string userIdField,
+                             Action<Dictionary<string, int>, string> callback)
+    {
+        Dictionary<string, int> scores = new Dictionary<string, int>();
+
+        int start = json.IndexOf("\"scores\"");
+        if (start >= 0)
+        {
+            int open = json.IndexOf('{', start);
+            int close = json.IndexOf('}', open);
+
+            if (open >= 0 && close > open)
+            {
+                string body = json.Substring(open + 1, close - open - 1);
+
+                foreach (string entry in body.Split(','))
+                {
+                    string[] parts = entry.Split(':');
+                    if (parts.Length != 2) continue;
+
+                    string key = parts[0].Trim().Trim('"');
+                    if (int.TryParse(parts[1].Trim(), out int value))
+                    {
+                        scores[key] = value;
+                    }
+                }
+            }
+        }
+
+        string leader = null;
+        int leaderIndex = json.IndexOf($"\"{userIdField}\"");
+        if (leaderIndex >= 0)
+        {
+            int firstQuote = json.IndexOf('"', json.IndexOf(':', leaderIndex));
+            if (firstQuote >= 0)
+            {
+                int lastQuote = json.IndexOf('"', firstQuote + 1);
+                if (lastQuote > firstQuote)
+                {
+                    leader = json.Substring(firstQuote + 1, lastQuote - firstQuote - 1);
+                }
+            }
+        }
+
+        callback?.Invoke(scores, leader);
     }
 
     // One flat class covering every field the server can send. JsonUtility

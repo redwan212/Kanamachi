@@ -661,6 +661,10 @@ MonoBehaviour:
   - {x: 6, y: 3}
   - {x: -6, y: -3}
   - {x: 6, y: -3}
+  catchKey: 32
+  catchReach: 2
+  levelManager: {fileID: 1179172386}
+  roundsPerLevel: 3
   visionController: {fileID: 413639383}
   showHud: 1
 --- !u!1 &519420028
@@ -1915,7 +1919,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &1179172380
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1923,7 +1927,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1179172379}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 76935ef461831824eb36316b3f420a36, type: 3}
   m_Name: 
@@ -2037,7 +2041,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1179172379}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d61d06b3da17f0143a7e26accec8030b, type: 3}
   m_Name: 

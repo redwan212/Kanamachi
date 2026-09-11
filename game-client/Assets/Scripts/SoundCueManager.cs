@@ -52,14 +52,21 @@ public class SoundCueManager : MonoBehaviour
 
     void Update()
     {
-        if (GameManager.Instance == null) return;
-
-        Player kanamachi = GameManager.Instance.GetKanamachiPlayer();
+        // Works in both modes: locally the GameManager owns the players, and
+        // in an online match the NetworkGameManager does.
+        Player kanamachi = GetKanamachi();
         if (kanamachi == null) return;
+
+        // Online, the cues are the blindfolded player's own aid - there is no
+        // reason for anyone else's machine to play them.
+        if (NetworkGameManager.Instance != null && GameManager.Instance == null)
+        {
+            if (!NetworkGameManager.Instance.LocalPlayerIsKanamachi) return;
+        }
 
         float closestDistance = float.MaxValue;
         closestPlayer = null;
-        foreach (var player in GameManager.Instance.players)
+        foreach (var player in GetPlayers())
         {
             if (player == kanamachi) continue;
             float dist = Vector2.Distance(kanamachi.transform.position, player.transform.position);
@@ -78,6 +85,20 @@ public class SoundCueManager : MonoBehaviour
             PlayFootstep();
             timer = GetIntervalForLevel(currentLevel);
         }
+    }
+
+    private Player GetKanamachi()
+    {
+        if (GameManager.Instance != null) return GameManager.Instance.GetKanamachiPlayer();
+        if (NetworkGameManager.Instance != null) return NetworkGameManager.Instance.KanamachiPlayer;
+        return null;
+    }
+
+    private System.Collections.Generic.IEnumerable<Player> GetPlayers()
+    {
+        if (GameManager.Instance != null) return GameManager.Instance.players;
+        if (NetworkGameManager.Instance != null) return NetworkGameManager.Instance.AllPlayers;
+        return new Player[0];
     }
 
     private void PlayFootstep()

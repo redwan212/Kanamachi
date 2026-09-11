@@ -1,5 +1,6 @@
 package com.kanamachi.game_server.game;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -45,6 +46,47 @@ public class GameSession {
         double dx = a.getX() - b.getX();
         double dy = a.getY() - b.getY();
         return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    // ---- scoring ----
+    // Points are calculated here, on the server, and never taken from the
+    // client. A modified Unity build can claim it moved somewhere or that it
+    // guessed - it cannot award itself a single point.
+
+    public void addScore(String userId, int amount) {
+        if (userId == null) return;
+        playerStates.computeIfAbsent(userId, PlayerState::new).addScore(amount);
+    }
+
+    public int getScore(String userId) {
+        PlayerState state = playerStates.get(userId);
+        return state != null ? state.getScore() : 0;
+    }
+
+    public Map<String, Integer> getScoreboard() {
+        Map<String, Integer> scores = new LinkedHashMap<>();
+        for (Map.Entry<String, PlayerState> entry : playerStates.entrySet()) {
+            scores.put(entry.getKey(), entry.getValue().getScore());
+        }
+        return scores;
+    }
+
+    // The player with the most points. Null while nobody has scored.
+    public String getLeadingUserId() {
+        String leader = null;
+        int best = Integer.MIN_VALUE;
+
+        for (PlayerState state : playerStates.values()) {
+            if (state.getScore() > best) {
+                best = state.getScore();
+                leader = state.getUserId();
+            }
+        }
+        return leader;
+    }
+
+    public int nextRound() {
+        return ++currentRound;
     }
 
     public String getKanamachiUserId() {
