@@ -3,6 +3,7 @@ package com.kanamachi.game_server.websocket;
 import tools.jackson.databind.ObjectMapper;
 import com.kanamachi.game_server.game.GameSession;
 import com.kanamachi.game_server.game.GameSessionManager;
+import com.kanamachi.game_server.service.MatchResultService;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -34,14 +35,17 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     private static final int ROUNDS_PER_MATCH = 12;
 
     private final GameSessionManager gameSessionManager;
+    private final MatchResultService matchResultService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Random random = new Random();
 
     // roomCode -> currently connected sessions in that room
     private final Map<String, List<WebSocketSession>> roomSessions = new ConcurrentHashMap<>();
 
-    public GameWebSocketHandler(GameSessionManager gameSessionManager) {
+    public GameWebSocketHandler(GameSessionManager gameSessionManager,
+                                MatchResultService matchResultService) {
         this.gameSessionManager = gameSessionManager;
+        this.matchResultService = matchResultService;
     }
 
     @Override
@@ -51,6 +55,9 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         String username = usernameOf(session);
 
         roomSessions.computeIfAbsent(roomCode, code -> new CopyOnWriteArrayList<>()).add(session);
+
+        // Remembered so saved matches and rounds can show names, not ids.
+        gameSessionManager.getOrCreate(roomCode).setPlayerName(userId, username);
 
         broadcast(roomCode, msg(
                 "type", "PLAYER_JOINED",
@@ -153,6 +160,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         }
 
         int round = gameSession.nextRound();
+        System.out.println(">>> round now " + round + " of " + ROUNDS_PER_MATCH + " in room " + roomCode);
 
         broadcast(roomCode, msg(
                 "type", "GUESS_RESULT",
@@ -170,6 +178,19 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
         broadcastScores(roomCode, gameSession);
 
+        int pointsAwarded = correct ? CORRECT_GUESS_POINTS : -WRONG_GUESS_PENALTY;
+
+        // Persistence is deliberately best-effort: a database problem should
+        // not knock the players out of a match in progress.
+        try {
+            matchResultService.saveRound(
+                    roomCode, round - 1, userId, actualCaughtPlayerId,
+                    guessedPlayerId, correct, pointsAwarded,
+                    gameSession.getPlayerNames());
+        } catch (Exception e) {
+            System.err.println("[GameWebSocketHandler] Could not save round: " + e.getMessage());
+        }
+
         gameSession.setPendingCaughtPlayerId(null);
 
         if (round > ROUNDS_PER_MATCH) {
@@ -182,6 +203,10 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     // The match is over once every level has been played out. The winner is
     // decided here, from the server's own scores - a client cannot claim it.
     private void finishMatch(String roomCode, GameSession gameSession) throws IOException {
+        System.out.println(">>> finishMatch called for room " + roomCode
+                + ", rounds=" + gameSession.getCurrentRound()
+                + ", players=" + gameSession.getScoreboard().size());
+
         gameSession.setGameState(GameSession.GameState.FINISHED);
 
         String winnerId = gameSession.getLeadingUserId();
@@ -192,6 +217,21 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
                 "scores", gameSession.getScoreboard(),
                 "rounds", gameSession.getCurrentRound() - 1
         ), null);
+
+        try {
+            matchResultService.saveFinishedMatch(
+                    roomCode,
+                    gameSession.getCurrentRound() - 1,
+                    winnerId,
+                    gameSession.getScoreboard(),
+                    gameSession.getPlayerNames());
+
+            System.out.println(">>> MATCH SAVED to MongoDB for room " + roomCode);
+        } catch (Exception e) {
+            System.out.println(">>> MATCH SAVE FAILED: " + e.getClass().getSimpleName()
+                    + " - " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     // Sent after every scoring event so all clients show the same numbers.

@@ -186,6 +186,10 @@ public class NetworkGameManager : MonoBehaviour
 
     private void HandleConnected()
     {
+        // A fresh connection means a fresh match - without this, a client
+        // that has already seen a result screen stays stuck on it.
+        ResetMatchState();
+
         // The server does not send a PLAYER_JOINED for the player who just
         // connected, so spawn the local one here.
         SpawnLocalPlayer();
@@ -311,6 +315,26 @@ public class NetworkGameManager : MonoBehaviour
         }
 
         leadingUserId = leader;
+    }
+
+    private void ResetMatchState()
+    {
+        matchOver = false;
+        winnerUserId = null;
+        isGuessing = false;
+        caughtUserId = null;
+        matchStarted = false;
+        currentRound = 0;
+        roundsPlayedInLevel = 0;
+        scores.Clear();
+        leadingUserId = null;
+
+        foreach (var pair in playersByUserId)
+        {
+            if (pair.Value != null) Destroy(pair.Value.gameObject);
+        }
+        playersByUserId.Clear();
+        localPlayer = null;
     }
 
     private void HandleMatchOver(Dictionary<string, int> finalScores, string winner)

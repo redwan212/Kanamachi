@@ -15,6 +15,9 @@ public class GameSession {
     private final String roomCode;
     private final Map<String, PlayerState> playerStates = new ConcurrentHashMap<>();
 
+    // userId -> username, so saved records can carry readable names
+    private final Map<String, String> playerNames = new ConcurrentHashMap<>();
+
     private volatile String kanamachiUserId;
     private volatile String pendingCaughtPlayerId;
     private volatile GameState gameState = GameState.WAITING;
@@ -46,6 +49,15 @@ public class GameSession {
         double dx = a.getX() - b.getX();
         double dy = a.getY() - b.getY();
         return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    public void setPlayerName(String userId, String username) {
+        if (userId == null || username == null) return;
+        playerNames.put(userId, username);
+    }
+
+    public Map<String, String> getPlayerNames() {
+        return playerNames;
     }
 
     // ---- scoring ----
