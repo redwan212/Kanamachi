@@ -63,6 +63,7 @@ public class EnvironmentBuilder : MonoBehaviour
     {
         Clear();
         BuildGround();
+        BuildArenaMask();
 
         // Same seed on every machine, so every player sees the same courtyard.
         System.Random random = new System.Random(1000 + levelIndex);
@@ -117,6 +118,29 @@ public class EnvironmentBuilder : MonoBehaviour
                 renderer.flipY = (x * y) % 3 == 0;
             }
         }
+    }
+
+    // The alpona ring follows the blindfolded player, so near a wall it
+    // would spill outside the courtyard. A mask the size of the arena keeps
+    // anything drawn on the ground inside the ground.
+    private void BuildArenaMask()
+    {
+        if (groundTile == null) return;
+
+        GameObject maskObj = new GameObject("ArenaMask");
+        maskObj.transform.SetParent(root, false);
+        maskObj.transform.position = Vector3.zero;
+
+        SpriteMask mask = maskObj.AddComponent<SpriteMask>();
+        mask.sprite = groundTile;
+
+        float tileWorldSize = groundTile.rect.width / groundTile.pixelsPerUnit;
+        maskObj.transform.localScale = new Vector3(
+                arenaHalfSize.x * 2f / tileWorldSize,
+                arenaHalfSize.y * 2f / tileWorldSize,
+                1f);
+
+        spawned.Add(maskObj);
     }
 
     // ---------- Props ----------

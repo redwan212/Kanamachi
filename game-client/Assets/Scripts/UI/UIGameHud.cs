@@ -156,7 +156,7 @@ public class UIGameHud : MonoBehaviour
     private void BuildResultPanel()
     {
         resultRoot = UIBuilder.FullScreen(canvas.transform, "ResultPanel",
-                new Color(0.02f, 0.03f, 0.07f, 0.93f));
+                new Color(0.055f, 0.07f, 0.13f, 1f));
 
         resultTitle = UIBuilder.Label(resultRoot.transform, "Match over",
                 UITheme.TitleSize, UITheme.Accent, new Vector2(0f, 230f), 900f, 80f);
@@ -196,6 +196,8 @@ public class UIGameHud : MonoBehaviour
     public void SetVisible(bool visible)
     {
         if (canvas != null) canvas.gameObject.SetActive(visible);
+        if (hudRoot != null && visible) hudRoot.SetActive(true);
+
         if (!visible)
         {
             if (guessRoot != null) guessRoot.SetActive(false);
@@ -312,6 +314,9 @@ public class UIGameHud : MonoBehaviour
         if (resultRoot == null) return;
 
         HideGuessPanel();
+
+        // The HUD would otherwise sit on top of the result.
+        if (hudRoot != null) hudRoot.SetActive(false);
 
         resultTitle.text = localPlayerWon ? "You win" : "Match over";
         resultWinner.text = winnerName;

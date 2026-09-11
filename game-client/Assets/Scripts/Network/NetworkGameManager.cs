@@ -45,6 +45,10 @@ public class NetworkGameManager : MonoBehaviour
     [Header("References")]
     public NetworkVisionController visionController;
 
+    [Header("Feel")]
+    [Tooltip("Small sprite puffed up under a player's feet as they walk.")]
+    public Sprite dustSprite;
+
     // userId -> that person's player object on this machine
     private readonly Dictionary<string, Player> playersByUserId = new Dictionary<string, Player>();
 
@@ -330,6 +334,9 @@ public class NetworkGameManager : MonoBehaviour
         isGuessing = true;
         caughtUserId = caughtPlayerId;
 
+        if (GameFeel.Instance != null) GameFeel.Instance.ShakeForCatch();
+        if (GameAudio.Instance != null) GameAudio.Instance.PlayCatch();
+
         Debug.Log($"[NetworkGameManager] {NameOf(kanamachiId)} caught somebody.");
 
         OpenGuessPanel();
@@ -349,6 +356,9 @@ public class NetworkGameManager : MonoBehaviour
 
         string caughtName = NameOf(caughtUserId);
         caughtUserId = null;
+
+        if (GameFeel.Instance != null) GameFeel.Instance.ShakeForGuess(correct);
+        if (GameAudio.Instance != null) GameAudio.Instance.PlayGuessResult(correct);
 
         ShowMessage(correct
             ? $"Correct - it was {caughtName}."
@@ -433,6 +443,23 @@ public class NetworkGameManager : MonoBehaviour
 
         roundsPlayedInLevel = 0;
 
+        // Faded through, so the arena is never seen rebuilding itself.
+        if (GameFeel.Instance != null)
+        {
+            GameFeel.Instance.FadeThrough(() =>
+            {
+                if (levelManager.AdvanceToNextLevel())
+                {
+                    ShowMessage($"Moving on to {levelManager.GetCurrentLevelName()}.");
+                }
+                else
+                {
+                    ShowMessage("That was the final level.");
+                }
+            });
+            return;
+        }
+
         if (levelManager.AdvanceToNextLevel())
         {
             ShowMessage($"Moving on to {levelManager.GetCurrentLevelName()}.");
@@ -501,6 +528,11 @@ public class NetworkGameManager : MonoBehaviour
 
     private void FinishSetup(Player player, string userId, string username)
     {
+        // Breathing, squashing and kicking up dust - added here so it
+        // applies to local and remote players alike.
+        PlayerAnimator animator = player.gameObject.AddComponent<PlayerAnimator>();
+        animator.dustSprite = dustSprite;
+
         Character character = CharacterFor(userId);
         if (character != null)
         {
