@@ -133,6 +133,72 @@ public class ApiClient : MonoBehaviour
         }, onError));
     }
 
+    // ---------- Stats and history ----------
+    // Read-only, so these are safe to call from a menu at any time.
+
+    public void GetLeaderboard(string sortBy, Action<PlayerStats[]> onSuccess, Action<string> onError)
+    {
+        StartCoroutine(Get($"/api/leaderboard?sortBy={sortBy}", json =>
+        {
+            onSuccess?.Invoke(ParseArray<PlayerStats>(json));
+        }, onError));
+    }
+
+    public void GetMyStats(Action<PlayerStats> onSuccess, Action<string> onError)
+    {
+        if (!SessionData.IsLoggedIn)
+        {
+            onError?.Invoke("Not signed in.");
+            return;
+        }
+
+        StartCoroutine(Get($"/api/stats/{SessionData.UserId}", json =>
+        {
+            onSuccess?.Invoke(JsonUtility.FromJson<PlayerStats>(json));
+        }, onError));
+    }
+
+    public void GetMyAchievements(Action<Achievement[]> onSuccess, Action<string> onError)
+    {
+        if (!SessionData.IsLoggedIn)
+        {
+            onError?.Invoke("Not signed in.");
+            return;
+        }
+
+        StartCoroutine(Get($"/api/achievements/{SessionData.UserId}", json =>
+        {
+            onSuccess?.Invoke(ParseArray<Achievement>(json));
+        }, onError));
+    }
+
+    public void GetMyMatches(Action<MatchSummary[]> onSuccess, Action<string> onError)
+    {
+        StartCoroutine(Get($"/api/matches/{SessionData.UserId}", json =>
+        {
+            onSuccess?.Invoke(ParseArray<MatchSummary>(json));
+        }, onError));
+    }
+
+    // JsonUtility cannot deserialize a bare JSON array, so it is wrapped in
+    // an object first. This is a known Unity limitation rather than a quirk
+    // of the server.
+    private T[] ParseArray<T>(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "[]") return new T[0];
+
+        string wrapped = "{\"items\":" + json + "}";
+        Wrapper<T> parsed = JsonUtility.FromJson<Wrapper<T>>(wrapped);
+
+        return parsed != null && parsed.items != null ? parsed.items : new T[0];
+    }
+
+    [Serializable]
+    private class Wrapper<T>
+    {
+        public T[] items;
+    }
+
     // ---------- Plumbing ----------
 
     private IEnumerator Post(string path, string jsonBody,
@@ -264,6 +330,34 @@ public class ApiClient : MonoBehaviour
         public string token;
         public string username;
         public string userId;
+    }
+
+    [Serializable] public class PlayerStats
+    {
+        public string userId;
+        public string username;
+        public int matchesPlayed;
+        public int matchesWon;
+        public int totalScore;
+        public int highestScore;
+        public int correctGuesses;
+        public int wrongGuesses;
+        public int timesCaught;
+        public double winRate;
+    }
+
+    [Serializable] public class Achievement
+    {
+        public string title;
+        public string description;
+        public string type;
+    }
+
+    [Serializable] public class MatchSummary
+    {
+        public string roomCode;
+        public string winnerUsername;
+        public int totalRounds;
     }
 
     [Serializable] public class RoomResponse

@@ -19,6 +19,8 @@ public class UIManager : MonoBehaviour
         MainMenu,
         Room,
         Lobby,
+        Leaderboard,
+        Profile,
         InGame
     }
 
@@ -39,6 +41,10 @@ public class UIManager : MonoBehaviour
     private TMP_InputField roomCodeField;
     private TextMeshProUGUI roomStatus;
 
+    // Leaderboard and profile
+    private TextMeshProUGUI leaderboardList;
+    private TextMeshProUGUI profileBody;
+
     // Lobby
     private TextMeshProUGUI lobbyCodeLabel;
     private TextMeshProUGUI lobbyPlayersLabel;
@@ -58,6 +64,8 @@ public class UIManager : MonoBehaviour
         BuildMainMenuScreen();
         BuildRoomScreen();
         BuildLobbyScreen();
+        BuildLeaderboardScreen();
+        BuildProfileScreen();
 
         Show(Screen.Login);
     }
@@ -103,7 +111,7 @@ public class UIManager : MonoBehaviour
 
         // uGUI needs an EventSystem to deliver clicks; scenes built before
         // any UI existed will not have one.
-        if (Object.FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
+        if (Object.FindFirstObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
         {
             GameObject eventSystem = new GameObject("EventSystem",
                     typeof(UnityEngine.EventSystems.EventSystem),
@@ -210,11 +218,158 @@ public class UIManager : MonoBehaviour
         UIBuilder.TextButton(root.transform, "Join a room", new Vector2(0f, 14f),
                 () => Show(Screen.Room), false);
 
-        UIBuilder.TextButton(root.transform, "Log out", new Vector2(0f, -100f), () =>
+        UIBuilder.TextButton(root.transform, "Leaderboard", new Vector2(0f, -52f), () =>
+        {
+            Show(Screen.Leaderboard);
+            LoadLeaderboard("score");
+        }, false);
+
+        UIBuilder.TextButton(root.transform, "My profile", new Vector2(0f, -118f), () =>
+        {
+            Show(Screen.Profile);
+            LoadProfile();
+        }, false);
+
+        UIBuilder.TextButton(root.transform, "Log out", new Vector2(0f, -210f), () =>
         {
             SessionData.ClearAll();
             Show(Screen.Login);
         }, false);
+    }
+
+    // ---------- Leaderboard ----------
+
+    private void BuildLeaderboardScreen()
+    {
+        GameObject root = NewScreen(Screen.Leaderboard, "LeaderboardScreen");
+
+        UIBuilder.Label(root.transform, "Kanamachi Masters", UITheme.HeadingSize,
+                UITheme.Accent, new Vector2(0f, 330f), 900f, 60f);
+
+        GameObject card = UIBuilder.Panel(root.transform, "Card", UITheme.Panel,
+                new Vector2(760f, 480f), new Vector2(0f, 20f));
+
+        // Column headings, so the numbers are readable without a legend.
+        UIBuilder.Label(card.transform, "Player", UITheme.SmallSize, UITheme.TextMuted,
+                new Vector2(-250f, 205f), 240f, 28f, TextAlignmentOptions.Left);
+        UIBuilder.Label(card.transform, "Played    Won    Points", UITheme.SmallSize,
+                UITheme.TextMuted, new Vector2(180f, 205f), 360f, 28f, TextAlignmentOptions.Right);
+
+        leaderboardList = UIBuilder.Label(card.transform, "Loading...", UITheme.BodySize,
+                UITheme.TextPrimary, new Vector2(0f, -20f), 700f, 400f, TextAlignmentOptions.TopLeft);
+
+        UIBuilder.TextButton(root.transform, "By points", new Vector2(-180f, -300f),
+                () => LoadLeaderboard("score"), true, 240f);
+        UIBuilder.TextButton(root.transform, "By wins", new Vector2(80f, -300f),
+                () => LoadLeaderboard("wins"), false, 240f);
+        UIBuilder.TextButton(root.transform, "Back", new Vector2(0f, -370f),
+                () => Show(Screen.MainMenu), false, 240f);
+    }
+
+    private void LoadLeaderboard(string sortBy)
+    {
+        leaderboardList.text = "Loading...";
+
+        ApiClient.Instance.GetLeaderboard(sortBy, entries =>
+        {
+            if (entries.Length == 0)
+            {
+                leaderboardList.text = "No matches have been played yet.";
+                return;
+            }
+
+            System.Text.StringBuilder builder = new System.Text.StringBuilder();
+
+            for (int i = 0; i < entries.Length; i++)
+            {
+                ApiClient.PlayerStats entry = entries[i];
+                bool isMe = entry.userId == SessionData.UserId;
+
+                // Padded so the columns line up in a single text block.
+                string row = $"{i + 1,2}.  {Pad(entry.username, 16)}" +
+                             $"{entry.matchesPlayed,6}{entry.matchesWon,7}{entry.totalScore,9}";
+
+                builder.AppendLine(isMe ? $"<color=#F2C14E>{row}</color>" : row);
+            }
+
+            leaderboardList.text = builder.ToString();
+        },
+        error => leaderboardList.text = error);
+    }
+
+    private string Pad(string value, int width)
+    {
+        if (string.IsNullOrEmpty(value)) value = "-";
+        if (value.Length > width) value = value.Substring(0, width - 1) + "\u2026";
+        return value.PadRight(width);
+    }
+
+    // ---------- Profile ----------
+
+    private void BuildProfileScreen()
+    {
+        GameObject root = NewScreen(Screen.Profile, "ProfileScreen");
+
+        UIBuilder.Label(root.transform, "Your record", UITheme.HeadingSize,
+                UITheme.Accent, new Vector2(0f, 330f), 900f, 60f);
+
+        GameObject card = UIBuilder.Panel(root.transform, "Card", UITheme.Panel,
+                new Vector2(680f, 480f), new Vector2(0f, 20f));
+
+        profileBody = UIBuilder.Label(card.transform, "Loading...", UITheme.BodySize,
+                UITheme.TextPrimary, new Vector2(0f, 0f), 620f, 440f, TextAlignmentOptions.TopLeft);
+
+        UIBuilder.TextButton(root.transform, "Back", new Vector2(0f, -330f),
+                () => Show(Screen.MainMenu), false, 240f);
+    }
+
+    private void LoadProfile()
+    {
+        profileBody.text = "Loading...";
+
+        ApiClient.Instance.GetMyStats(stats =>
+        {
+            System.Text.StringBuilder builder = new System.Text.StringBuilder();
+
+            builder.AppendLine($"<color=#F2C14E>{stats.username}</color>");
+            builder.AppendLine();
+            builder.AppendLine($"Matches played      {stats.matchesPlayed}");
+            builder.AppendLine($"Matches won         {stats.matchesWon}");
+            builder.AppendLine($"Win rate            {stats.winRate * 100f:F0}%");
+            builder.AppendLine($"Total points        {stats.totalScore}");
+            builder.AppendLine($"Best match          {stats.highestScore}");
+            builder.AppendLine();
+            builder.AppendLine($"Correct guesses     {stats.correctGuesses}");
+            builder.AppendLine($"Wrong guesses       {stats.wrongGuesses}");
+            builder.AppendLine($"Times caught        {stats.timesCaught}");
+
+            profileBody.text = builder.ToString();
+
+            // Achievements are fetched separately and appended, so a slow
+            // second request never blocks the numbers from appearing.
+            ApiClient.Instance.GetMyAchievements(unlocked =>
+            {
+                System.Text.StringBuilder extra = new System.Text.StringBuilder(profileBody.text);
+                extra.AppendLine();
+                extra.AppendLine("<color=#F2C14E>Achievements</color>");
+
+                if (unlocked.Length == 0)
+                {
+                    extra.AppendLine("None yet - finish a match to earn your first.");
+                }
+                else
+                {
+                    foreach (ApiClient.Achievement a in unlocked)
+                    {
+                        extra.AppendLine($"  {a.title} - {a.description}");
+                    }
+                }
+
+                profileBody.text = extra.ToString();
+            },
+            error => { });
+        },
+        error => profileBody.text = "No record yet. Play a match and it will appear here.");
     }
 
     // ---------- Room ----------
