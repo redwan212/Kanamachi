@@ -26,11 +26,32 @@ public class NetworkLocalPlayer : Player
     {
         base.FixedUpdate();
 
+        ClampToArena();
+
         // NetworkClient throttles this internally, so calling it every
         // physics step is fine.
         if (NetworkClient.Instance != null)
         {
             NetworkClient.Instance.SendPosition(rb.position);
+        }
+    }
+
+    // The walls should stop anyone leaving, but a missing collider or a
+    // fast diagonal can slip through. Keeping the player inside here means
+    // a scene mistake never strands somebody outside the courtyard.
+    private void ClampToArena()
+    {
+        if (EnvironmentBuilder.Instance == null) return;
+
+        Vector2 limit = EnvironmentBuilder.Instance.arenaHalfSize - new Vector2(0.4f, 0.4f);
+        Vector2 position = rb.position;
+
+        float x = Mathf.Clamp(position.x, -limit.x, limit.x);
+        float y = Mathf.Clamp(position.y, -limit.y, limit.y);
+
+        if (!Mathf.Approximately(x, position.x) || !Mathf.Approximately(y, position.y))
+        {
+            rb.position = new Vector2(x, y);
         }
     }
 }

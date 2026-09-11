@@ -13,6 +13,9 @@ public class Character : ScriptableObject
     public string description;
 
     public Sprite avatarSprite;
+
+    [Tooltip("Shown while this character is the blindfolded Kanamachi. Optional.")]
+    public Sprite blindfoldedSprite;
     public Color spriteColor = Color.white;
 
     [Header("Movement Profile")]

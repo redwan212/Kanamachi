@@ -29,21 +29,69 @@ public class NetworkVisionController : MonoBehaviour
 
     private Light2D visionLight;
 
+    [Header("Diagnostics")]
+    [Tooltip("Logs what the global light is actually set to, to catch anything else changing it.")]
+    public bool logLightState = true;
+
+    private Player trackedPlayer;
+    private bool trackedIsKanamachi;
+    private float nextLogTime;
+
     void Start()
     {
         if (globalLight == null)
         {
             Debug.LogWarning("[NetworkVisionController] No Global Light 2D assigned.");
+        }
+    }
+
+    // The game manager pushes its state in every frame. Pulling from a
+    // static reference turned out to be fragile: a duplicate manager could
+    // own the static while a different one held the real state.
+    public void SetState(Player localPlayer, bool localPlayerIsKanamachi)
+    {
+        if (globalLight == null) return;
+
+        if (logLightState && Time.time >= nextLogTime)
+        {
+            nextLogTime = Time.time + 2f;
+            Debug.Log($"[Vision] light='{globalLight.gameObject.name}' " +
+                      $"intensity={globalLight.intensity:F2} " +
+                      $"kanamachi={localPlayerIsKanamachi} " +
+                      $"player={(localPlayer != null ? localPlayer.DisplayName : "null")}");
+        }
+
+        bool changed = localPlayerIsKanamachi != trackedIsKanamachi || localPlayer != trackedPlayer;
+
+        trackedIsKanamachi = localPlayerIsKanamachi;
+        trackedPlayer = localPlayer;
+
+        if (changed)
+        {
+            Apply(localPlayer, localPlayerIsKanamachi);
             return;
         }
 
-        // Until the server says who the Kanamachi is, let the player see.
-        globalLight.intensity = normalIntensity;
+        // Keep enforcing it, so anything else writing to the light is undone
+        // on the next frame rather than winning permanently.
+        float wanted = localPlayerIsKanamachi && localPlayer != null
+                ? blindfoldIntensity
+                : normalIntensity;
+
+        if (!Mathf.Approximately(globalLight.intensity, wanted))
+        {
+            globalLight.intensity = wanted;
+        }
     }
 
-    // Called whenever the Kanamachi changes. localPlayer may be null if this
-    // player's own object has not been spawned yet.
+    // Kept so existing callers still work; the per-frame check above is
+    // what actually guarantees the result.
     public void Refresh(Player localPlayer, bool localPlayerIsKanamachi)
+    {
+        Apply(localPlayer, localPlayerIsKanamachi);
+    }
+
+    private void Apply(Player localPlayer, bool localPlayerIsKanamachi)
     {
         if (globalLight == null) return;
 

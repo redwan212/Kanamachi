@@ -551,6 +551,10 @@ GameObject:
   - component: {fileID: 413639382}
   - component: {fileID: 413639384}
   - component: {fileID: 413639383}
+  - component: {fileID: 413639385}
+  - component: {fileID: 413639386}
+  - component: {fileID: 413639387}
+  - component: {fileID: 413639388}
   m_Layer: 0
   m_Name: NetworkManager
   m_TagString: Untagged
@@ -565,7 +569,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 413639378}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bb79c0e98b4b65940a21799517b5c537, type: 3}
   m_Name: 
@@ -636,6 +640,7 @@ MonoBehaviour:
   visionInnerRadius: 0.7
   visionIntensity: 1.3
   visionColor: {r: 1, g: 0.95, b: 0.8, a: 1}
+  logLightState: 1
 --- !u!114 &413639384
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -666,7 +671,79 @@ MonoBehaviour:
   levelManager: {fileID: 1179172386}
   roundsPerLevel: 3
   visionController: {fileID: 413639383}
-  showHud: 1
+--- !u!114 &413639385
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 413639378}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b599e5b16ca5d2e4986bff488adbd578, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIManager
+  autoConnectFromLobby: 1
+--- !u!114 &413639386
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 413639378}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 53e3f373172fc1845ab7ce0199b2f393, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIGameHud
+--- !u!114 &413639387
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 413639378}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21dfe37e79c3cf54798253564b9ac346, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnvironmentBuilder
+  groundTile: {fileID: 8499830108503845486, guid: 08e1af13455f4eb4abb1aa8fa9101065, type: 3}
+  arenaHalfSize: {x: 7.5, y: 5}
+  houseSprite: {fileID: -2985936213686127828, guid: 2e8a72659c0beb6498f5203c55004f03, type: 3}
+  treeSprite: {fileID: 4919239818020762377, guid: 1ac4c86d93730ab48b54042e94bb88af, type: 3}
+  wellSprite: {fileID: 7607580135259746089, guid: b52be5c847716df45bb638a446f06931, type: 3}
+  charpaiSprite: {fileID: 481575282541449883, guid: 386d07f8122cd4144b0a6ac02fa33065, type: 3}
+  potSprite: {fileID: 3064870327654842437, guid: 6040e1365f6e1db4f9a21f37f1da336a, type: 3}
+  fenceSprite: {fileID: 3122741260060017019, guid: 05c59b7abf5a896498bfde009b2e8436, type: 3}
+  lanternSprite: {fileID: 1571352349760799271, guid: 22617a37eb2395d499e935eb5c6c5e60, type: 3}
+  spawnClearance: 2.2
+  globalLight: {fileID: 619394801}
+  litSpriteMaterial: {fileID: 2100000, guid: a97c105638bdf8b4a8650670310a4cd3, type: 2}
+--- !u!114 &413639388
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 413639378}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 070c0e6c71a169d40b580792e8d9711f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameAudio
+  footstepClip: {fileID: 0}
+  clapClip: {fileID: 0}
+  catchClip: {fileID: 0}
+  correctGuessClip: {fileID: 0}
+  wrongGuessClip: {fileID: 0}
+  courtyardAmbience: {fileID: 0}
+  melaAmbience: {fileID: 0}
+  stormAmbience: {fileID: 0}
+  finalAmbience: {fileID: 0}
+  ambienceVolume: 0.35
+  effectsVolume: 0.9
+  panRange: 6
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -748,7 +825,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 2
-  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+  m_BackGroundColor: {r: 0.08627451, g: 0.10980392, b: 0.2, a: 1}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -1977,7 +2054,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1179172379}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4a33f29efa47ed644ad32e053f8484b3, type: 3}
   m_Name: 
@@ -2092,7 +2169,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!212 &1272394588
 SpriteRenderer:
   serializedVersion: 3

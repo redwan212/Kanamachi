@@ -103,16 +103,32 @@ public class SoundCueManager : MonoBehaviour
 
     private void PlayFootstep()
     {
-        audioSource.volume = Mathf.Clamp01(cueSystem.GetVolumeForLevel(currentLevel) * EventVolumeMultiplier);
+        float volume = cueSystem.GetVolumeForLevel(currentLevel);
 
-        // Each character shifts the footstep pitch slightly. This is the
-        // subtle identity clue from spec Section 18 - the Kanamachi can learn
-        // to recognise who is nearby by how their footsteps sound.
+        // Each character shifts the footstep pitch slightly - the subtle
+        // identity clue from spec Section 18.
         float pitchOffset = (closestPlayer != null && closestPlayer.character != null)
             ? closestPlayer.character.footstepPitchOffset
             : 0f;
 
-        audioSource.pitch = cueSystem.GetPitchForLevel(currentLevel) + pitchOffset;
+        float pitch = cueSystem.GetPitchForLevel(currentLevel) + pitchOffset;
+
+        // GameAudio does the panning, so the blindfolded player can tell
+        // which side the footsteps are coming from.
+        if (GameAudio.Instance != null)
+        {
+            Player kanamachi = GetKanamachi();
+
+            Vector2 listener = kanamachi != null ? (Vector2)kanamachi.transform.position : Vector2.zero;
+            Vector2 source = closestPlayer != null ? (Vector2)closestPlayer.transform.position : listener;
+
+            GameAudio.Instance.PlayFootstep(listener, source, volume, pitch, EventVolumeMultiplier);
+            return;
+        }
+
+        // Fallback for the local scene, which has its own AudioSource.
+        audioSource.volume = Mathf.Clamp01(volume * EventVolumeMultiplier);
+        audioSource.pitch = pitch;
         audioSource.PlayOneShot(audioSource.clip);
     }
 

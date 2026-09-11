@@ -45,11 +45,12 @@ public class NetworkGameManager : MonoBehaviour
     [Header("References")]
     public NetworkVisionController visionController;
 
-    [Header("Debug")]
-    public bool showHud = true;
-
     // userId -> that person's player object on this machine
     private readonly Dictionary<string, Player> playersByUserId = new Dictionary<string, Player>();
+
+    // Remembered separately, so a name is available even before that
+    // person's player object exists on this machine.
+    private readonly Dictionary<string, string> usernamesByUserId = new Dictionary<string, string>();
 
     private Player localPlayer;
     private string kanamachiUserId;
@@ -63,8 +64,10 @@ public class NetworkGameManager : MonoBehaviour
     private string winnerUserId;
     private bool isGuessing;
     private string caughtUserId;
-    private string lastMessage;
-    private float lastMessageTime;
+
+    // Exposed so the vision controller can check the current state itself
+    // instead of depending on being told at the right moment.
+    public Player LocalPlayer { get { return localPlayer; } }
 
     public bool LocalPlayerIsKanamachi
     {
@@ -98,6 +101,16 @@ public class NetworkGameManager : MonoBehaviour
 
     void Awake()
     {
+        // A second copy would take over the static reference while the first
+        // one kept the real state, leaving anything that reads Instance
+        // looking at an empty manager.
+        if (Instance != null && Instance != this)
+        {
+            Debug.LogWarning("[NetworkGameManager] A second instance was found and removed.");
+            Destroy(this);
+            return;
+        }
+
         Instance = this;
     }
 
@@ -124,6 +137,23 @@ public class NetworkGameManager : MonoBehaviour
 
     void Update()
     {
+        // The spawn and the server's announcement can land in either order,
+        // so the reference is recovered here rather than assumed.
+        if (localPlayer == null && !string.IsNullOrEmpty(SessionData.UserId))
+        {
+            if (playersByUserId.TryGetValue(SessionData.UserId, out Player mine) && mine != null)
+            {
+                localPlayer = mine;
+            }
+        }
+
+        // Pushed from here rather than pulled from a static, so the manager
+        // that actually holds the state is always the one driving the view.
+        if (visionController != null)
+        {
+            visionController.SetState(localPlayer, LocalPlayerIsKanamachi);
+        }
+
         // Only the blindfolded player can try to catch, and only while the
         // match is running and no guess is pending.
         if (!matchStarted || isGuessing) return;
@@ -198,8 +228,24 @@ public class NetworkGameManager : MonoBehaviour
     private void HandlePlayerJoined(string userId, string username)
     {
         if (string.IsNullOrEmpty(userId)) return;
+
+        if (!string.IsNullOrEmpty(username)) usernamesByUserId[userId] = username;
+
         if (userId == SessionData.UserId) return;      // that's us
-        if (playersByUserId.ContainsKey(userId)) return;
+
+        // A movement update can arrive before the join does, in which case
+        // the player was spawned without a name. Fill it in rather than
+        // leaving a raw id on screen until the next round.
+        if (playersByUserId.TryGetValue(userId, out Player existing))
+        {
+            if (existing is NetworkRemotePlayer remote && !string.IsNullOrEmpty(username))
+            {
+                remote.Username = username;
+                remote.gameObject.name = $"Player_{username}";
+                RefreshHud();
+            }
+            return;
+        }
 
         SpawnRemotePlayer(userId, username);
     }
@@ -241,6 +287,9 @@ public class NetworkGameManager : MonoBehaviour
 
         Debug.Log($"[NetworkGameManager] Match started, round {round}.");
 
+        if (UIManager.Instance != null) UIManager.Instance.Show(UIManager.Screen.InGame);
+        RefreshHud();
+
         // The server does not track levels, so the client drives them. Every
         // client counts the same broadcast results, so they stay in step.
         if (levelManager != null)
@@ -263,6 +312,8 @@ public class NetworkGameManager : MonoBehaviour
             }
         }
 
+        RefreshHud();
+
         Debug.Log(LocalPlayerIsKanamachi
             ? "[NetworkGameManager] You are the Kanamachi."
             : $"[NetworkGameManager] Kanamachi is {NameOf(newKanamachiId)}.");
@@ -280,16 +331,21 @@ public class NetworkGameManager : MonoBehaviour
         caughtUserId = caughtPlayerId;
 
         Debug.Log($"[NetworkGameManager] {NameOf(kanamachiId)} caught somebody.");
+
+        OpenGuessPanel();
+        RefreshHud();
     }
 
     private void HandleCatchRejected(string reason)
     {
-        ShowMessage(reason == "too_far" ? "Too far away." : "You are not the Kanamachi.");
+        ShowMessage(reason == "too_far" ? "Too far - get closer." : "You are not the Kanamachi.");
     }
 
     private void HandleGuessResult(bool correct, string newKanamachiId)
     {
         isGuessing = false;
+
+        if (UIGameHud.Instance != null) UIGameHud.Instance.HideGuessPanel();
 
         string caughtName = NameOf(caughtUserId);
         caughtUserId = null;
@@ -302,6 +358,7 @@ public class NetworkGameManager : MonoBehaviour
         HandleKanamachiChanged(newKanamachiId);
 
         AdvanceRound();
+        RefreshHud();
     }
 
     // Scores are never calculated here - they arrive from the server, which
@@ -315,6 +372,7 @@ public class NetworkGameManager : MonoBehaviour
         }
 
         leadingUserId = leader;
+        RefreshHud();
     }
 
     private void ResetMatchState()
@@ -334,7 +392,10 @@ public class NetworkGameManager : MonoBehaviour
             if (pair.Value != null) Destroy(pair.Value.gameObject);
         }
         playersByUserId.Clear();
+        usernamesByUserId.Clear();
         localPlayer = null;
+
+        if (UIGameHud.Instance != null) UIGameHud.Instance.SetVisible(false);
     }
 
     private void HandleMatchOver(Dictionary<string, int> finalScores, string winner)
@@ -349,6 +410,14 @@ public class NetworkGameManager : MonoBehaviour
         if (visionController != null)
         {
             visionController.Refresh(localPlayer, false);
+        }
+
+        bool localWon = !string.IsNullOrEmpty(winner) && winner == SessionData.UserId;
+
+        if (UIGameHud.Instance != null)
+        {
+            UIGameHud.Instance.SetVisible(true);
+            UIGameHud.Instance.ShowResult(NameOf(winner), localWon, scores, NameOf);
         }
 
         Debug.Log($"[NetworkGameManager] Match over. Winner: {NameOf(winner)}");
@@ -389,6 +458,16 @@ public class NetworkGameManager : MonoBehaviour
 
         localPlayer = player;
         Debug.Log($"[NetworkGameManager] Spawned local player as {player.DisplayName}.");
+
+        // The server can announce the Kanamachi before this object exists,
+        // in which case the earlier vision update had nobody to darken the
+        // world around. Re-applying it here covers that ordering.
+        if (visionController != null)
+        {
+            visionController.Refresh(localPlayer, LocalPlayerIsKanamachi);
+        }
+
+        RefreshHud();
     }
 
     private Player SpawnRemotePlayer(string userId, string username)
@@ -476,15 +555,23 @@ public class NetworkGameManager : MonoBehaviour
 
     private void ShowMessage(string message)
     {
-        lastMessage = message;
-        lastMessageTime = Time.time;
+        if (UIGameHud.Instance != null) UIGameHud.Instance.ShowToast(message);
         Debug.Log($"[NetworkGameManager] {message}");
     }
 
     private string NameOf(string userId)
     {
         if (string.IsNullOrEmpty(userId)) return "nobody";
-        if (playersByUserId.TryGetValue(userId, out Player p) && p != null) return p.DisplayName;
+
+        if (playersByUserId.TryGetValue(userId, out Player p) && p != null)
+        {
+            return p.DisplayName;
+        }
+
+        // Scores can mention somebody whose player object has not been
+        // created here yet, so fall back to the username before the id.
+        if (usernamesByUserId.TryGetValue(userId, out string username)) return username;
+
         return Short(userId);
     }
 
@@ -494,187 +581,54 @@ public class NetworkGameManager : MonoBehaviour
         return userId.Length <= 6 ? userId : userId.Substring(userId.Length - 6);
     }
 
-    void OnGUI()
+    // ---------- Display ----------
+    // All drawing lives in UIGameHud. This class only tells it what the
+    // server has said, so the interface can change without the game logic
+    // being touched.
+
+    private void RefreshHud()
     {
-        if (matchOver)
+        if (UIGameHud.Instance == null) return;
+
+        UIGameHud.Instance.SetVisible(matchStarted || matchOver);
+
+        string levelName = levelManager != null && levelManager.CurrentLevel != null
+                ? levelManager.GetCurrentLevelName()
+                : null;
+
+        UIGameHud.Instance.SetLevel(levelName, roundsPlayedInLevel + 1, roundsPerLevel,
+                playersByUserId.Count);
+
+        UIGameHud.Instance.SetRole(
+                localPlayer != null ? localPlayer.DisplayName : "-",
+                LocalPlayerIsKanamachi,
+                NameOf(kanamachiUserId),
+                matchStarted && !isGuessing);
+
+        UIGameHud.Instance.SetScores(scores, NameOf, leadingUserId);
+    }
+
+    private void OpenGuessPanel()
+    {
+        if (UIGameHud.Instance == null) return;
+
+        if (!LocalPlayerIsKanamachi)
         {
-            DrawMatchOverPanel();
+            UIGameHud.Instance.ShowWaitingForGuess(NameOf(kanamachiUserId));
             return;
         }
 
-        if (!showHud) return;
-
-        DrawHud();
-
-        // Only the Kanamachi picks - everyone else waits and watches.
-        if (isGuessing && LocalPlayerIsKanamachi)
-        {
-            DrawGuessButtons();
-        }
-        else if (isGuessing)
-        {
-            GUIStyle waiting = new GUIStyle();
-            waiting.fontSize = 20;
-            waiting.alignment = TextAnchor.MiddleCenter;
-            waiting.normal.textColor = Color.white;
-            GUI.Label(new Rect(Screen.width / 2f - 200, Screen.height / 2f - 20, 400, 30),
-                "The Kanamachi is guessing...", waiting);
-        }
-    }
-
-    private void DrawMatchOverPanel()
-    {
-        GUI.Box(new Rect(0, 0, Screen.width, Screen.height), GUIContent.none);
-
-        GUIStyle titleStyle = new GUIStyle();
-        titleStyle.fontSize = 30;
-        titleStyle.alignment = TextAnchor.MiddleCenter;
-        titleStyle.normal.textColor = Color.yellow;
-
-        GUIStyle textStyle = new GUIStyle();
-        textStyle.fontSize = 18;
-        textStyle.alignment = TextAnchor.MiddleCenter;
-        textStyle.normal.textColor = Color.white;
-
-        float centerX = Screen.width / 2f - 250f;
-        float y = Screen.height / 2f - 160f;
-
-        GUI.Label(new Rect(centerX, y, 500, 40), "Match over", titleStyle);
-        y += 50f;
-
-        bool localWon = !string.IsNullOrEmpty(winnerUserId) && winnerUserId == SessionData.UserId;
-
-        GUI.Label(new Rect(centerX, y, 500, 26), localWon ? "You are the Kanamachi Master" : "Kanamachi Master", textStyle);
-        y += 30f;
-
-        GUI.Label(new Rect(centerX, y, 500, 40), NameOf(winnerUserId), titleStyle);
-        y += 56f;
-
-        foreach (var pair in scores)
-        {
-            GUI.Label(new Rect(centerX, y, 500, 24), $"{NameOf(pair.Key)}   {pair.Value} pts", textStyle);
-            y += 26f;
-        }
-    }
-
-    private void DrawHud()
-    {
-        GUIStyle title = new GUIStyle();
-        title.fontSize = 18;
-        title.normal.textColor = Color.yellow;
-
-        GUIStyle small = new GUIStyle();
-        small.fontSize = 15;
-        small.normal.textColor = Color.white;
-
-        // Anchored with enough margin that long names are not clipped.
-        float width = 300f;
-        float x = Screen.width - width - 20f;
-        float y = 12f;
-
-        string you = localPlayer != null ? localPlayer.DisplayName : "(not spawned)";
-        GUI.Label(new Rect(x, y, width, 24), $"You: {you}", title);
-        y += 26f;
-
-        GUI.Label(new Rect(x, y, width, 22),
-            matchStarted ? $"Round {currentRound}" : "Waiting for another player...", small);
-        y += 22f;
-
-        GUI.Label(new Rect(x, y, width, 22),
-            LocalPlayerIsKanamachi ? "You are the KANAMACHI" : $"Kanamachi: {NameOf(kanamachiUserId)}", small);
-        y += 22f;
-
-        GUI.Label(new Rect(x, y, width, 22), $"In room: {playersByUserId.Count}", small);
-        y += 22f;
-
-        if (levelManager != null && levelManager.CurrentLevel != null)
-        {
-            GUI.Label(new Rect(x, y, width, 22),
-                $"{levelManager.GetCurrentLevelName()} - round {roundsPlayedInLevel + 1}/{roundsPerLevel}", small);
-            y += 22f;
-        }
-
-        if (LocalPlayerIsKanamachi && matchStarted && !isGuessing)
-        {
-            GUI.Label(new Rect(x, y, width, 22), $"Press {catchKey} to grab someone", small);
-            y += 22f;
-        }
-
-        if (scores.Count > 0)
-        {
-            y += 6f;
-            GUI.Label(new Rect(x, y, width, 22), "Scores", title);
-            y += 24f;
-
-            foreach (var pair in scores)
-            {
-                bool leading = pair.Key == leadingUserId;
-
-                GUIStyle row = new GUIStyle();
-                row.fontSize = 15;
-                row.normal.textColor = leading ? Color.yellow : Color.white;
-
-                string label = $"{NameOf(pair.Key)}: {pair.Value}" + (leading ? "  (leading)" : "");
-                GUI.Label(new Rect(x, y, width, 22), label, row);
-                y += 20f;
-            }
-        }
-
-        // Feedback such as "Too far away" fades after a few seconds.
-        if (!string.IsNullOrEmpty(lastMessage) && Time.time - lastMessageTime < 3f)
-        {
-            GUIStyle msg = new GUIStyle();
-            msg.fontSize = 16;
-            msg.normal.textColor = Color.cyan;
-            GUI.Label(new Rect(x, y + 6f, width, 40), lastMessage, msg);
-        }
-    }
-
-    private void DrawGuessButtons()
-    {
-        GUIStyle prompt = new GUIStyle();
-        prompt.fontSize = 22;
-        prompt.alignment = TextAnchor.MiddleCenter;
-        prompt.normal.textColor = Color.red;
-
-        const float buttonWidth = 150f;
-        const float buttonHeight = 40f;
-        const float gap = 12f;
-        const int columns = 2;
-
-        int count = 0;
-        foreach (var pair in playersByUserId)
-        {
-            if (pair.Key != SessionData.UserId && pair.Value != null) count++;
-        }
-
-        int rows = Mathf.Max(1, Mathf.CeilToInt(count / (float)columns));
-        float gridWidth = columns * buttonWidth + (columns - 1) * gap;
-        float gridHeight = rows * buttonHeight + (rows - 1) * gap;
-
-        float startX = Screen.width / 2f - gridWidth / 2f;
-        float startY = Screen.height / 2f - gridHeight / 2f;
-
-        GUI.Label(new Rect(Screen.width / 2f - 200, startY - 50, 400, 30),
-            "Who did you catch?", prompt);
-
-        int index = 0;
+        List<KeyValuePair<string, string>> options = new List<KeyValuePair<string, string>>();
         foreach (var pair in playersByUserId)
         {
             if (pair.Key == SessionData.UserId || pair.Value == null) continue;
-
-            int row = index / columns;
-            int column = index % columns;
-
-            float bx = startX + column * (buttonWidth + gap);
-            float by = startY + row * (buttonHeight + gap);
-
-            if (GUI.Button(new Rect(bx, by, buttonWidth, buttonHeight), pair.Value.DisplayName))
-            {
-                NetworkClient.Instance.SendGuess(pair.Key);
-            }
-
-            index++;
+            options.Add(new KeyValuePair<string, string>(pair.Key, pair.Value.DisplayName));
         }
+
+        UIGameHud.Instance.ShowGuessPanel(options, guessedUserId =>
+        {
+            UIGameHud.Instance.HideGuessPanel();
+            NetworkClient.Instance.SendGuess(guessedUserId);
+        });
     }
 }

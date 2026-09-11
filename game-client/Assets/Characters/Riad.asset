@@ -14,7 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Character
   characterName: Riad
   description: A calm, steady kid who never rushes into trouble.
-  avatarSprite: {fileID: 0}
+  avatarSprite: {fileID: 327475729708679676, guid: f05795d4d978bf043aea6f8f9cede14c, type: 3}
+  blindfoldedSprite: {fileID: -6610970390427465971, guid: 6706617f868e1154292a90c6a11a4e7a, type: 3}
   spriteColor: {r: 0, g: 1, b: 0, a: 1}
   moveSpeedMultiplier: 0.95
   footstepPitchOffset: -0.1

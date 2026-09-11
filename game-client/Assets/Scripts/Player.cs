@@ -45,6 +45,22 @@ public abstract class Player : MonoBehaviour
         ApplyCharacterProfile();
     }
 
+    // The blindfolded Kanamachi wears a red gamcha over the eyes, so the
+    // other players can see at a glance who is "it".
+    private void RefreshSprite()
+    {
+        if (character == null) return;
+
+        SpriteRenderer sr = GetComponent<SpriteRenderer>();
+        if (sr == null) return;
+
+        Sprite wanted = isBlindfolded && character.blindfoldedSprite != null
+                ? character.blindfoldedSprite
+                : character.avatarSprite;
+
+        if (wanted != null) sr.sprite = wanted;
+    }
+
     protected void ApplyCharacterProfile()
     {
         if (character == null) return;
@@ -55,10 +71,19 @@ public abstract class Player : MonoBehaviour
         if (sr != null)
         {
             sr.color = character.spriteColor;
-            if (character.avatarSprite != null)
-            {
-                sr.sprite = character.avatarSprite;
-            }
+        }
+
+        RefreshSprite();
+    }
+
+    void LateUpdate()
+    {
+        // Three-quarter view: whoever is lower on screen is nearer the
+        // camera, so sorting follows the y position.
+        SpriteRenderer sr = GetComponent<SpriteRenderer>();
+        if (sr != null)
+        {
+            sr.sortingOrder = Mathf.RoundToInt(-transform.position.y * 10f) + 1;
         }
     }
 
@@ -101,5 +126,6 @@ public abstract class Player : MonoBehaviour
     public void SetBlindfolded(bool value)
     {
         isBlindfolded = value;
+        RefreshSprite();
     }
 }

@@ -63,6 +63,17 @@ public class LevelManager : MonoBehaviour
                   $"{CurrentLevel.GetType().Name} | Ambient noise: {CurrentLevel.GetAmbientNoise()} " +
                   $"| Difficulty: {CurrentLevel.GetDifficulty()}");
 
+        // Dress the arena for this level: ground, props, colliders, light.
+        if (EnvironmentBuilder.Instance != null)
+        {
+            EnvironmentBuilder.Instance.Build(index, CurrentLevel.GetType().Name);
+        }
+
+        if (GameAudio.Instance != null)
+        {
+            GameAudio.Instance.SetLevelAmbience(index);
+        }
+
         // Let the sound system pick up this level's cue behavior
         // (Normal for most levels, distorted for the Storm Night).
         if (SoundCueManager.Instance != null)
