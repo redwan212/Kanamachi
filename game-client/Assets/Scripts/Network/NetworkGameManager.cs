@@ -28,6 +28,10 @@ public class NetworkGameManager : MonoBehaviour
         new Vector2(-6f, -3f), new Vector2(6f, -3f)
     };
 
+    [Header("Rounds")]
+    [Tooltip("Seconds of safe time after each round starts, so nobody is caught where they were standing a moment ago.")]
+    public float roundStartDelay = 2.5f;
+
     [Header("Catching")]
     [Tooltip("Key the Kanamachi presses to try to grab whoever is nearest.")]
     public KeyCode catchKey = KeyCode.Space;
@@ -44,6 +48,16 @@ public class NetworkGameManager : MonoBehaviour
 
     [Header("References")]
     public NetworkVisionController visionController;
+
+    [Header("AI")]
+    [Tooltip("How often the host reports each AI's position, in seconds.")]
+    public float aiReportInterval = 0.1f;
+
+    [Tooltip("Seconds a blindfolded AI waits before naming who it caught.")]
+    public float aiGuessDelay = 1.6f;
+
+    [Tooltip("Prefab used for AI players. Leave empty to reuse the network player prefab.")]
+    public GameObject aiPlayerPrefab;
 
     [Header("Feel")]
     [Tooltip("Small sprite puffed up under a player's feet as they walk.")]
@@ -65,6 +79,10 @@ public class NetworkGameManager : MonoBehaviour
     private readonly Dictionary<string, int> scores = new Dictionary<string, int>();
     private string leadingUserId;
     private bool matchOver;
+    private readonly HashSet<string> aiUserIds = new HashSet<string>();
+    private float aiReportTimer;
+    private float aiGuessAt;
+    private float roundStartTimer;
     private string winnerUserId;
     private bool isGuessing;
     private string caughtUserId;
@@ -80,11 +98,15 @@ public class NetworkGameManager : MonoBehaviour
 
     // Nobody moves while the Kanamachi is deciding who they caught, or
     // while a story chapter is on screen between levels.
+    // True during the safe period at the start of a round.
+    public bool IsRoundStarting { get { return roundStartTimer > 0f; } }
+
     public bool IsInputFrozen
     {
         get
         {
             if (isGuessing || matchOver) return true;
+            if (roundStartTimer > 0f) return true;
             if (StoryManager.Instance != null && StoryManager.Instance.IsShowing) return true;
             return false;
         }
@@ -135,6 +157,8 @@ public class NetworkGameManager : MonoBehaviour
         NetworkClient.Instance.OnCatchSuccess += HandleCatchSuccess;
         NetworkClient.Instance.OnCatchRejected += HandleCatchRejected;
         NetworkClient.Instance.OnGuessResult += HandleGuessResult;
+        NetworkClient.Instance.OnPlayerClapped += HandleClap;
+        NetworkClient.Instance.OnLobbyState += HandleLobbyState;
         NetworkClient.Instance.OnScoreUpdate += HandleScoreUpdate;
         NetworkClient.Instance.OnMatchOver += HandleMatchOver;
     }
@@ -158,15 +182,117 @@ public class NetworkGameManager : MonoBehaviour
             visionController.SetState(localPlayer, LocalPlayerIsKanamachi);
         }
 
+        // The host reports what the AI are doing. Without this the server
+        // never learns where they are, and a blindfolded AI could never
+        // grab anybody.
+        if (roundStartTimer > 0f)
+        {
+            roundStartTimer -= Time.deltaTime;
+
+            if (roundStartTimer <= 0f && UIGameHud.Instance != null)
+            {
+                UIGameHud.Instance.ShowToast("Go", 0.8f);
+            }
+        }
+
+        if (IsHost) DriveAi();
+
         // Only the blindfolded player can try to catch, and only while the
         // match is running and no guess is pending.
-        if (!matchStarted || isGuessing) return;
+        if (!matchStarted || isGuessing || IsRoundStarting) return;
         if (!LocalPlayerIsKanamachi || localPlayer == null) return;
 
         if (Input.GetKeyDown(catchKey))
         {
             TryCatch();
         }
+    }
+
+    private bool IsHost
+    {
+        get
+        {
+            return lobbyState != null
+                && !string.IsNullOrEmpty(SessionData.UserId)
+                && SessionData.UserId == lobbyState.hostUserId;
+        }
+    }
+
+    private void DriveAi()
+    {
+        if (aiUserIds.Count == 0 || NetworkClient.Instance == null) return;
+
+        // Positions, throttled the same way a person's are.
+        aiReportTimer -= Time.deltaTime;
+        if (aiReportTimer <= 0f)
+        {
+            aiReportTimer = aiReportInterval;
+
+            foreach (string aiId in aiUserIds)
+            {
+                if (playersByUserId.TryGetValue(aiId, out Player ai) && ai != null)
+                {
+                    NetworkClient.Instance.SendPositionAs(aiId, ai.transform.position);
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(kanamachiUserId) || !aiUserIds.Contains(kanamachiUserId)) return;
+        if (IsRoundStarting) return;
+
+        if (isGuessing)
+        {
+            DriveAiGuess();
+            return;
+        }
+
+        if (matchStarted) DriveAiCatch();
+    }
+
+    // A blindfolded AI grabs whoever comes within reach, the same rule the
+    // server applies to a person pressing Space.
+    private void DriveAiCatch()
+    {
+        if (!playersByUserId.TryGetValue(kanamachiUserId, out Player kanamachi) || kanamachi == null)
+        {
+            return;
+        }
+
+        foreach (var pair in playersByUserId)
+        {
+            if (pair.Key == kanamachiUserId || pair.Value == null) continue;
+
+            float distance = Vector2.Distance(
+                    kanamachi.transform.position, pair.Value.transform.position);
+
+            if (distance <= catchReach * 0.8f)
+            {
+                NetworkClient.Instance.SendCatchAttemptAs(kanamachiUserId, pair.Key);
+                return;
+            }
+        }
+    }
+
+    // It pauses first, so the guess does not appear instantly and read as a
+    // machine answering. Then it picks at random - an AI has no better
+    // information than a blindfolded person does.
+    private void DriveAiGuess()
+    {
+        if (Time.time < aiGuessAt) return;
+
+        List<string> options = new List<string>();
+        foreach (var pair in playersByUserId)
+        {
+            if (pair.Key != kanamachiUserId && pair.Value != null) options.Add(pair.Key);
+        }
+
+        if (options.Count == 0) return;
+
+        string guess = options[Random.Range(0, options.Count)];
+        NetworkClient.Instance.SendGuessAs(kanamachiUserId, guess);
+
+        // Stops a second guess going out before the result comes back.
+        aiGuessAt = Time.time + 5f;
     }
 
     private void TryCatch()
@@ -212,6 +338,8 @@ public class NetworkGameManager : MonoBehaviour
         NetworkClient.Instance.OnCatchSuccess -= HandleCatchSuccess;
         NetworkClient.Instance.OnCatchRejected -= HandleCatchRejected;
         NetworkClient.Instance.OnGuessResult -= HandleGuessResult;
+        NetworkClient.Instance.OnPlayerClapped -= HandleClap;
+        NetworkClient.Instance.OnLobbyState -= HandleLobbyState;
         NetworkClient.Instance.OnScoreUpdate -= HandleScoreUpdate;
         NetworkClient.Instance.OnMatchOver -= HandleMatchOver;
     }
@@ -283,6 +411,59 @@ public class NetworkGameManager : MonoBehaviour
         }
     }
 
+    // Remembered from the lobby so the match can spawn the AI slots and use
+    // the characters people actually chose, rather than guessing from ids.
+    private NetworkClient.LobbyState lobbyState;
+
+    // A clap is heard by everyone, and panned from where the clapper is -
+    // which is exactly the risk they took by doing it.
+    private void HandleClap(string userId)
+    {
+        if (!playersByUserId.TryGetValue(userId, out Player clapper) || clapper == null) return;
+
+        if (GameAudio.Instance != null)
+        {
+            Player listener = localPlayer != null ? localPlayer : clapper;
+            GameAudio.Instance.PlayClap(listener.transform.position, clapper.transform.position);
+        }
+
+        // Only the blindfolded player is told a clap happened. Everyone else
+        // can see who did it.
+        if (LocalPlayerIsKanamachi && UIGameHud.Instance != null)
+        {
+            UIGameHud.Instance.ShowToast("Somebody clapped.", 1.2f);
+        }
+    }
+
+    private void HandleLobbyState(NetworkClient.LobbyState state)
+    {
+        lobbyState = state;
+
+        if (UIManager.Instance != null) UIManager.Instance.ApplyLobbyState(state);
+    }
+
+    // Chosen in the lobby if it was; otherwise derived from the id, which
+    // keeps older flows working.
+    private Character ChosenCharacterFor(string userId)
+    {
+        if (lobbyState == null || lobbyState.slots == null) return CharacterFor(userId);
+
+        foreach (NetworkClient.LobbySlot slot in lobbyState.slots)
+        {
+            if (slot.userId != userId || string.IsNullOrEmpty(slot.character)) continue;
+
+            foreach (Character candidate in characterPool)
+            {
+                if (candidate != null && candidate.characterName == slot.character)
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        return CharacterFor(userId);
+    }
+
     private void HandleGameStarted(int round)
     {
         currentRound = round;
@@ -293,6 +474,9 @@ public class NetworkGameManager : MonoBehaviour
 
         if (UIManager.Instance != null) UIManager.Instance.Show(UIManager.Screen.InGame);
         RefreshHud();
+
+        SpawnAiPlayers();
+        roundStartTimer = roundStartDelay;
 
         // The server does not track levels, so the client drives them. Every
         // client counts the same broadcast results, so they stay in step.
@@ -339,13 +523,20 @@ public class NetworkGameManager : MonoBehaviour
 
         Debug.Log($"[NetworkGameManager] {NameOf(kanamachiId)} caught somebody.");
 
+        aiGuessAt = Time.time + aiGuessDelay;
+
         OpenGuessPanel();
         RefreshHud();
     }
 
     private void HandleCatchRejected(string reason)
     {
-        ShowMessage(reason == "too_far" ? "Too far - get closer." : "You are not the Kanamachi.");
+        string text;
+        if (reason == "too_far") text = "Too far - get closer.";
+        else if (reason == "round_starting") text = "Wait - the round is starting.";
+        else text = "You are not the Kanamachi.";
+
+        ShowMessage(text);
     }
 
     private void HandleGuessResult(bool correct, string newKanamachiId)
@@ -366,6 +557,8 @@ public class NetworkGameManager : MonoBehaviour
 
         // The server may have handed the blindfold to somebody new.
         HandleKanamachiChanged(newKanamachiId);
+
+        BeginNextRound();
 
         AdvanceRound();
         RefreshHud();
@@ -403,6 +596,7 @@ public class NetworkGameManager : MonoBehaviour
         }
         playersByUserId.Clear();
         usernamesByUserId.Clear();
+        aiUserIds.Clear();
         localPlayer = null;
 
         if (UIGameHud.Instance != null) UIGameHud.Instance.SetVisible(false);
@@ -431,6 +625,32 @@ public class NetworkGameManager : MonoBehaviour
         }
 
         Debug.Log($"[NetworkGameManager] Match over. Winner: {NameOf(winner)}");
+    }
+
+    // Everyone goes back to their starting place and nobody can be caught
+    // for a moment. Each client moves its own player; the others follow
+    // through the usual position updates, and the host moves the AI.
+    private void BeginNextRound()
+    {
+        roundStartTimer = roundStartDelay;
+
+        if (localPlayer != null)
+        {
+            localPlayer.transform.position = SpawnPointFor(SessionData.UserId);
+        }
+
+        if (IsHost)
+        {
+            foreach (string aiId in aiUserIds)
+            {
+                if (playersByUserId.TryGetValue(aiId, out Player ai) && ai != null)
+                {
+                    ai.transform.position = SpawnPointFor(aiId);
+                }
+            }
+        }
+
+        if (UIGameHud.Instance != null) UIGameHud.Instance.ShowToast("Get ready...", 1.8f);
     }
 
     private void AdvanceRound()
@@ -497,6 +717,60 @@ public class NetworkGameManager : MonoBehaviour
         RefreshHud();
     }
 
+    // AI slots become real players on every machine. They are driven
+    // locally rather than by the server, but because the personality and the
+    // spawn point both come from the shared lobby state, each client ends up
+    // with the same opponents in the same places.
+    private void SpawnAiPlayers()
+    {
+        if (lobbyState == null || lobbyState.slots == null) return;
+
+        foreach (NetworkClient.LobbySlot slot in lobbyState.slots)
+        {
+            if (slot.kind != "AI" || string.IsNullOrEmpty(slot.userId)) continue;
+            if (playersByUserId.ContainsKey(slot.userId)) continue;
+
+            SpawnAiPlayer(slot);
+        }
+    }
+
+    private void SpawnAiPlayer(NetworkClient.LobbySlot slot)
+    {
+        GameObject prefab = aiPlayerPrefab != null ? aiPlayerPrefab : networkPlayerPrefab;
+        if (prefab == null) return;
+
+        Vector2 spawn = SpawnPointFor(slot.userId);
+        GameObject obj = Instantiate(prefab, spawn, Quaternion.identity);
+        obj.name = $"AI_{slot.personality}";
+
+        // The personality classes are the same ones the local game uses -
+        // the behaviour written in Phase 6 is reused rather than rewritten.
+        Player player = AddPersonality(obj, slot.personality);
+        if (player == null)
+        {
+            Destroy(obj);
+            return;
+        }
+
+        usernamesByUserId[slot.userId] = slot.username;
+        aiUserIds.Add(slot.userId);
+        FinishSetup(player, slot.userId, slot.username);
+
+        Debug.Log($"[NetworkGameManager] Spawned {slot.personality} AI as {player.DisplayName}.");
+    }
+
+    private Player AddPersonality(GameObject obj, string personality)
+    {
+        switch (personality)
+        {
+            case "AGGRESSIVE": return obj.AddComponent<AggressiveAI>();
+            case "SNEAKY": return obj.AddComponent<SneakyAI>();
+            case "CAREFUL": return obj.AddComponent<CarefulAI>();
+            case "RANDOM": return obj.AddComponent<RandomAI>();
+            default: return obj.AddComponent<RandomAI>();
+        }
+    }
+
     private Player SpawnRemotePlayer(string userId, string username)
     {
         GameObject obj = CreatePlayerObject(userId, username);
@@ -533,7 +807,7 @@ public class NetworkGameManager : MonoBehaviour
         PlayerAnimator animator = player.gameObject.AddComponent<PlayerAnimator>();
         animator.dustSprite = dustSprite;
 
-        Character character = CharacterFor(userId);
+        Character character = ChosenCharacterFor(userId);
         if (character != null)
         {
             player.ApplyCharacter(character);
@@ -565,13 +839,41 @@ public class NetworkGameManager : MonoBehaviour
     private Character CharacterFor(string userId)
     {
         if (characterPool == null || characterPool.Length == 0) return null;
+
+        // Same reasoning as the spawn points: the slot number is already
+        // unique, so use it before falling back to a hash.
+        int index = SlotIndexOf(userId);
+        if (index >= 0) return characterPool[index % characterPool.Length];
+
         return characterPool[StableHash(userId) % characterPool.Length];
     }
 
+    // Slot index first, hash only as a fallback.
+    //
+    // Hashing the id gave two players the same corner often enough to be a
+    // problem: four ids into four slots collide regularly, and a round that
+    // starts with two people standing on each other is decided instantly.
+    // The lobby already numbers every player, so that number is used.
     private Vector2 SpawnPointFor(string userId)
     {
         if (spawnPoints == null || spawnPoints.Length == 0) return Vector2.zero;
+
+        int index = SlotIndexOf(userId);
+        if (index >= 0) return spawnPoints[index % spawnPoints.Length];
+
         return spawnPoints[StableHash(userId) % spawnPoints.Length];
+    }
+
+    private int SlotIndexOf(string userId)
+    {
+        if (lobbyState == null || lobbyState.slots == null) return -1;
+
+        foreach (NetworkClient.LobbySlot slot in lobbyState.slots)
+        {
+            if (slot.userId == userId) return slot.index;
+        }
+
+        return -1;
     }
 
     // ---------- Helpers ----------
@@ -589,6 +891,28 @@ public class NetworkGameManager : MonoBehaviour
     {
         if (UIGameHud.Instance != null) UIGameHud.Instance.ShowToast(message);
         Debug.Log($"[NetworkGameManager] {message}");
+    }
+
+    // Turns a character's sound profile into something the Kanamachi can
+    // match against what they just heard. This is what makes the guess a
+    // deduction rather than a one-in-three chance.
+    private string FootstepHint(Character character)
+    {
+        if (character == null) return "unfamiliar steps";
+
+        string pitch;
+        if (character.footstepPitchOffset >= 0.12f) pitch = "light, high steps";
+        else if (character.footstepPitchOffset >= 0.03f) pitch = "light steps";
+        else if (character.footstepPitchOffset <= -0.12f) pitch = "heavy, low steps";
+        else if (character.footstepPitchOffset <= -0.03f) pitch = "heavy steps";
+        else pitch = "even steps";
+
+        string pace;
+        if (character.moveSpeedMultiplier >= 1.04f) pace = "quick";
+        else if (character.moveSpeedMultiplier <= 0.96f) pace = "slow";
+        else pace = null;
+
+        return pace == null ? pitch : $"{pitch}, {pace}";
     }
 
     private string NameOf(string userId)
@@ -650,11 +974,25 @@ public class NetworkGameManager : MonoBehaviour
             return;
         }
 
-        List<KeyValuePair<string, string>> options = new List<KeyValuePair<string, string>>();
+        // A blindfolded AI decides for itself; nobody is asked to choose.
+        if (aiUserIds.Contains(kanamachiUserId))
+        {
+            UIGameHud.Instance.ShowWaitingForGuess(NameOf(kanamachiUserId));
+            return;
+        }
+
+        List<UIGameHud.GuessOption> options = new List<UIGameHud.GuessOption>();
+
         foreach (var pair in playersByUserId)
         {
             if (pair.Key == SessionData.UserId || pair.Value == null) continue;
-            options.Add(new KeyValuePair<string, string>(pair.Key, pair.Value.DisplayName));
+
+            options.Add(new UIGameHud.GuessOption
+            {
+                userId = pair.Key,
+                displayName = pair.Value.DisplayName,
+                hint = FootstepHint(pair.Value.character)
+            });
         }
 
         UIGameHud.Instance.ShowGuessPanel(options, guessedUserId =>

@@ -24,7 +24,7 @@ public class NetworkClient : MonoBehaviour
     public float minMoveDistance = 0.05f;
 
     [Header("Debug")]
-    public bool logMessages = true;
+    public bool logMessages = false;
 
     // ---------- Events other scripts listen to ----------
 
@@ -47,6 +47,9 @@ public class NetworkClient : MonoBehaviour
 
     // final scores and the winner, once every round has been played
     public event Action<Dictionary<string, int>, string> OnMatchOver;
+
+    // the whole room: who is in which slot, what they picked, who is host
+    public event Action<LobbyState> OnLobbyState;
 
     public bool IsConnected
     {
@@ -191,6 +194,34 @@ public class NetworkClient : MonoBehaviour
         sendTimer = 1f / Mathf.Max(1f, sendsPerSecond);
     }
 
+    // ---------- Speaking for an AI ----------
+    //
+    // AI opponents run on the clients, so the host reports their actions on
+    // their behalf. The server only accepts these from the host, and only
+    // for slots that really hold an AI.
+
+    public void SendPositionAs(string aiUserId, Vector2 position)
+    {
+        if (!IsConnected) return;
+
+        string x = position.x.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        string y = position.y.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        Send($"{{\"type\":\"PLAYER_MOVED\",\"asPlayerId\":\"{aiUserId}\",\"x\":{x},\"y\":{y}}}");
+    }
+
+    public void SendCatchAttemptAs(string aiUserId, string targetPlayerId)
+    {
+        if (!IsConnected) return;
+        Send($"{{\"type\":\"CATCH_ATTEMPT\",\"asPlayerId\":\"{aiUserId}\",\"targetPlayerId\":\"{targetPlayerId}\"}}");
+    }
+
+    public void SendGuessAs(string aiUserId, string guessedPlayerId)
+    {
+        if (!IsConnected) return;
+        Send($"{{\"type\":\"GUESS\",\"asPlayerId\":\"{aiUserId}\",\"guessedPlayerId\":\"{guessedPlayerId}\"}}");
+    }
+
     // The server checks whether this player really is the Kanamachi and
     // whether the target is within range, so a rejection is normal.
     public void SendCatchAttempt(string targetPlayerId)
@@ -203,6 +234,27 @@ public class NetworkClient : MonoBehaviour
     {
         if (!IsConnected) return;
         Send($"{{\"type\":\"GUESS\",\"guessedPlayerId\":\"{guessedPlayerId}\"}}");
+    }
+
+    // ---------- Lobby ----------
+
+    public void SendCharacterChoice(string characterName)
+    {
+        if (!IsConnected) return;
+        Send($"{{\"type\":\"SET_CHARACTER\",\"character\":\"{characterName}\"}}");
+    }
+
+    // personality empty clears the slot back to empty.
+    public void SendAiSlot(int index, string personality)
+    {
+        if (!IsConnected) return;
+        Send($"{{\"type\":\"SET_AI_SLOT\",\"index\":{index},\"personality\":\"{personality}\"}}");
+    }
+
+    public void SendStartMatch()
+    {
+        if (!IsConnected) return;
+        Send("{\"type\":\"START_MATCH\"}");
     }
 
     public void SendClap()
@@ -234,6 +286,21 @@ public class NetworkClient : MonoBehaviour
         if (json.Contains("\"MATCH_OVER\""))
         {
             ParseScores(json, "winnerUserId", OnMatchOver);
+            return;
+        }
+
+        // The lobby carries a nested array, which JsonUtility handles once
+        // the shape is declared - unlike the score maps above.
+        if (json.Contains("\"LOBBY_STATE\""))
+        {
+            try
+            {
+                OnLobbyState?.Invoke(JsonUtility.FromJson<LobbyState>(json));
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[NetworkClient] Could not read lobby: {e.Message}");
+            }
             return;
         }
 
@@ -347,6 +414,26 @@ public class NetworkClient : MonoBehaviour
         }
 
         callback?.Invoke(scores, leader);
+    }
+
+    [Serializable]
+    public class LobbySlot
+    {
+        public int index;
+        public string kind;        // EMPTY, HUMAN or AI
+        public string userId;
+        public string username;
+        public string character;
+        public string personality;
+    }
+
+    [Serializable]
+    public class LobbyState
+    {
+        public string hostUserId;
+        public int humans;
+        public int occupied;
+        public LobbySlot[] slots;
     }
 
     // One flat class covering every field the server can send. JsonUtility

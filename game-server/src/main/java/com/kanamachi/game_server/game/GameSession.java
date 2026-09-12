@@ -1,6 +1,8 @@
 package com.kanamachi.game_server.game;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -18,13 +20,132 @@ public class GameSession {
     // userId -> username, so saved records can carry readable names
     private final Map<String, String> playerNames = new ConcurrentHashMap<>();
 
+    // A room is four slots. Humans take them as they connect; whatever is
+    // left can be filled with AI before the host starts the match.
+    public static final int SLOT_COUNT = 4;
+
+    private final List<RoomSlot> slots = new ArrayList<>();
+    private volatile String hostUserId;
+
     private volatile String kanamachiUserId;
     private volatile String pendingCaughtPlayerId;
     private volatile GameState gameState = GameState.WAITING;
     private volatile int currentRound = 0;
 
+    // When the current round began. Catching is refused for a moment after
+    // this, so nobody is grabbed before they have had a chance to move away
+    // from where they were standing when the last round ended.
+    private volatile long roundStartedAt = System.currentTimeMillis();
+
     public GameSession(String roomCode) {
         this.roomCode = roomCode;
+    }
+
+    private void ensureSlots() {
+        if (!slots.isEmpty()) return;
+
+        synchronized (slots) {
+            if (slots.isEmpty()) {
+                for (int i = 0; i < SLOT_COUNT; i++) {
+                    slots.add(new RoomSlot(i));
+                }
+            }
+        }
+    }
+
+    public List<RoomSlot> getSlots() {
+        ensureSlots();
+        return slots;
+    }
+
+    // Called when somebody connects. Returns the slot they were given, or
+    // null when the room is already full.
+    public RoomSlot seat(String userId, String username) {
+        ensureSlots();
+
+        RoomSlot existing = slotOf(userId);
+        if (existing != null) {
+            existing.takeBy(userId, username);
+            return existing;
+        }
+
+        for (RoomSlot slot : slots) {
+            if (!slot.isOccupied()) {
+                slot.takeBy(userId, username);
+                if (hostUserId == null) hostUserId = userId;
+                return slot;
+            }
+        }
+
+        return null;
+    }
+
+    public void release(String userId) {
+        ensureSlots();
+
+        RoomSlot slot = slotOf(userId);
+        if (slot != null) slot.clear();
+
+        // The room needs a host, so it passes to whoever is still here.
+        if (userId != null && userId.equals(hostUserId)) {
+            hostUserId = null;
+            for (RoomSlot candidate : slots) {
+                if (candidate.getKind() == RoomSlot.Kind.HUMAN) {
+                    hostUserId = candidate.getUserId();
+                    break;
+                }
+            }
+        }
+    }
+
+    public RoomSlot slotOf(String userId) {
+        ensureSlots();
+        if (userId == null) return null;
+
+        for (RoomSlot slot : slots) {
+            if (userId.equals(slot.getUserId())) return slot;
+        }
+        return null;
+    }
+
+    public RoomSlot slotAt(int index) {
+        ensureSlots();
+        if (index < 0 || index >= slots.size()) return null;
+        return slots.get(index);
+    }
+
+    public int countHumans() {
+        ensureSlots();
+
+        int count = 0;
+        for (RoomSlot slot : slots) {
+            if (slot.getKind() == RoomSlot.Kind.HUMAN) count++;
+        }
+        return count;
+    }
+
+    public int countOccupied() {
+        ensureSlots();
+
+        int count = 0;
+        for (RoomSlot slot : slots) {
+            if (slot.isOccupied()) count++;
+        }
+        return count;
+    }
+
+    // Every AI slot becomes a player for the rest of the match, so their
+    // names are registered the same way a person's would be.
+    public void registerAiNames() {
+        for (RoomSlot slot : getSlots()) {
+            if (slot.getKind() == RoomSlot.Kind.AI) {
+                setPlayerName(slot.getUserId(), slot.getUsername());
+            }
+        }
+    }
+
+    public String getHostUserId() {
+        return hostUserId;
     }
 
     public String getRoomCode() {
@@ -95,6 +216,14 @@ public class GameSession {
             }
         }
         return leader;
+    }
+
+    public long getRoundStartedAt() {
+        return roundStartedAt;
+    }
+
+    public void markRoundStart() {
+        this.roundStartedAt = System.currentTimeMillis();
     }
 
     public int nextRound() {

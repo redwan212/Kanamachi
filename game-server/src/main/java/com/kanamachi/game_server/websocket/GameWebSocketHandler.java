@@ -3,6 +3,7 @@ package com.kanamachi.game_server.websocket;
 import tools.jackson.databind.ObjectMapper;
 import com.kanamachi.game_server.game.GameSession;
 import com.kanamachi.game_server.game.GameSessionManager;
+import com.kanamachi.game_server.game.RoomSlot;
 import com.kanamachi.game_server.service.MatchResultService;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -11,6 +12,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +36,9 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     // Four levels of three rounds each, matching the client's level pacing.
     private static final int ROUNDS_PER_MATCH = 12;
 
+    // Grace period at the start of every round, in milliseconds.
+    private static final long ROUND_GRACE_MS = 2500;
+
     private final GameSessionManager gameSessionManager;
     private final MatchResultService matchResultService;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -56,16 +61,23 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
         roomSessions.computeIfAbsent(roomCode, code -> new CopyOnWriteArrayList<>()).add(session);
 
-        // Remembered so saved matches and rounds can show names, not ids.
-        gameSessionManager.getOrCreate(roomCode).setPlayerName(userId, username);
+        GameSession gameSession = gameSessionManager.getOrCreate(roomCode);
+        gameSession.setPlayerName(userId, username);
 
-        broadcast(roomCode, msg(
-                "type", "PLAYER_JOINED",
-                "userId", userId,
-                "username", username
-        ), null);
+        // Every arrival takes a slot. A full room is refused rather than
+        // silently letting a fifth person stand in the courtyard.
+        RoomSlot slot = gameSession.seat(userId, username);
+        if (slot == null) {
+            session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
+                    msg("type", "ERROR", "message", "This room is full."))));
+            session.close();
+            return;
+        }
 
-        maybeStartMatch(roomCode);
+        // The lobby replaces the old PLAYER_JOINED broadcast: it carries the
+        // whole room in one message, so a client that arrives late sees the
+        // same thing as one that was already here.
+        broadcastLobby(roomCode, gameSession);
     }
 
     @Override
@@ -91,10 +103,16 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         GameSession gameSession = gameSessionManager.getOrCreate(roomCode);
 
         switch (type) {
-            case "PLAYER_MOVED" -> handlePlayerMoved(roomCode, userId, data, gameSession);
-            case "CATCH_ATTEMPT" -> handleCatchAttempt(session, roomCode, userId, data, gameSession);
-            case "GUESS" -> handleGuess(roomCode, userId, data, gameSession);
+            case "PLAYER_MOVED" -> handlePlayerMoved(roomCode,
+                    actingUserId(gameSession, userId, data), data, gameSession);
+            case "CATCH_ATTEMPT" -> handleCatchAttempt(session, roomCode,
+                    actingUserId(gameSession, userId, data), data, gameSession);
+            case "GUESS" -> handleGuess(roomCode,
+                    actingUserId(gameSession, userId, data), data, gameSession);
             case "PLAYER_CLAPPED" -> broadcast(roomCode, msg("type", "PLAYER_CLAPPED", "userId", userId), userId);
+            case "SET_CHARACTER" -> handleSetCharacter(roomCode, userId, data, gameSession);
+            case "SET_AI_SLOT" -> handleSetAiSlot(roomCode, userId, data, gameSession);
+            case "START_MATCH" -> handleStartMatch(roomCode, userId, gameSession);
             default -> { /* unknown message type - ignore */ }
         }
     }
@@ -120,7 +138,14 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         double distance = gameSession.distanceBetween(userId, targetUserId);
         boolean closeEnough = distance <= CATCH_RADIUS;
 
-        if (isKanamachi && closeEnough) {
+        // Rounds begin with everyone back at their starting places, and for
+        // a moment nobody can be caught. Without this the Kanamachi simply
+        // grabs whoever they were already touching when the last round
+        // ended, and the match resolves itself.
+        long sinceRoundStart = System.currentTimeMillis() - gameSession.getRoundStartedAt();
+        boolean roundStarting = sinceRoundStart < ROUND_GRACE_MS;
+
+        if (isKanamachi && closeEnough && !roundStarting) {
             gameSession.setGameState(GameSession.GameState.GUESSING);
             gameSession.setPendingCaughtPlayerId(targetUserId);
 
@@ -130,7 +155,11 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
                     "caughtPlayerId", targetUserId
             ), null);
         } else {
-            String reason = !isKanamachi ? "not_kanamachi" : "too_far";
+            String reason;
+            if (!isKanamachi) reason = "not_kanamachi";
+            else if (roundStarting) reason = "round_starting";
+            else reason = "too_far";
+
             sendTo(session, msg(
                     "type", "CATCH_ATTEMPT",
                     "result", "rejected",
@@ -149,6 +178,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         // result, never asked for it.
         if (correct) {
             gameSession.addScore(userId, CORRECT_GUESS_POINTS);
+
             gameSession.setKanamachiUserId(actualCaughtPlayerId);
         } else {
             gameSession.addScore(userId, -WRONG_GUESS_PENALTY);
@@ -160,6 +190,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         }
 
         int round = gameSession.nextRound();
+        gameSession.markRoundStart();
         System.out.println(">>> round now " + round + " of " + ROUNDS_PER_MATCH + " in room " + roomCode);
 
         broadcast(roomCode, msg(
@@ -246,24 +277,193 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     // Once at least 2 players are connected and no Kanamachi has been chosen
     // yet, the server randomly assigns one and starts the match. Clients
     // never choose this themselves - it's a server-authoritative decision.
-    private void maybeStartMatch(String roomCode) throws IOException {
-        GameSession gameSession = gameSessionManager.getOrCreate(roomCode);
-        List<WebSocketSession> sessions = roomSessions.get(roomCode);
+    // The complete state of the room: who is in which slot, what they chose,
+    // and who may press start.
+    private void broadcastLobby(String roomCode, GameSession gameSession) throws IOException {
+        List<Map<String, Object>> slots = new ArrayList<>();
 
-        if (sessions == null || sessions.size() < 2) return;
+        for (RoomSlot slot : gameSession.getSlots()) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("index", slot.getIndex());
+            entry.put("kind", slot.getKind().name());
+            entry.put("userId", slot.getUserId());
+            entry.put("username", slot.getUsername());
+            entry.put("character", slot.getCharacterName());
+            entry.put("personality", slot.getPersonality() != null
+                    ? slot.getPersonality().name() : null);
+            slots.add(entry);
+        }
+
+        broadcast(roomCode, msg(
+                "type", "LOBBY_STATE",
+                "hostUserId", gameSession.getHostUserId(),
+                "humans", gameSession.countHumans(),
+                "occupied", gameSession.countOccupied(),
+                "slots", slots
+        ), null);
+    }
+
+    private void handleSetCharacter(String roomCode, String userId,
+                                    Map<String, Object> data, GameSession gameSession)
+            throws IOException {
+
+        String character = (String) data.get("character");
+        if (character == null) return;
+
+        // One character per room, so two players are never indistinguishable
+        // to whoever is blindfolded.
+        for (RoomSlot other : gameSession.getSlots()) {
+            if (character.equals(other.getCharacterName()) && !userId.equals(other.getUserId())) {
+                return;
+            }
+        }
+
+        RoomSlot slot = gameSession.slotOf(userId);
+        if (slot == null) return;
+
+        slot.setCharacterName(character);
+        broadcastLobby(roomCode, gameSession);
+    }
+
+    // Only the host arranges the AI slots.
+    private void handleSetAiSlot(String roomCode, String userId,
+                                 Map<String, Object> data, GameSession gameSession)
+            throws IOException {
+
+        if (!userId.equals(gameSession.getHostUserId())) return;
+
+        Integer index = asInt(data.get("index"));
+        if (index == null) return;
+
+        RoomSlot slot = gameSession.slotAt(index);
+        if (slot == null || slot.getKind() == RoomSlot.Kind.HUMAN) return;
+
+        String personality = (String) data.get("personality");
+
+        if (personality == null || personality.isEmpty()) {
+            slot.clear();
+        } else if ("NEXT".equals(personality)) {
+            // Filling an empty slot: pick one the room does not have yet, so
+            // three AI opponents are three different opponents.
+            slot.fillWithAi(unusedPersonality(gameSession));
+        } else {
+            try {
+                slot.fillWithAi(RoomSlot.AiPersonality.valueOf(personality));
+            } catch (IllegalArgumentException e) {
+                return;
+            }
+        }
+
+        broadcastLobby(roomCode, gameSession);
+    }
+
+    private void handleStartMatch(String roomCode, String userId, GameSession gameSession)
+            throws IOException {
+
+        if (!userId.equals(gameSession.getHostUserId())) return;
         if (gameSession.getKanamachiUserId() != null) return;
 
-        WebSocketSession chosen = sessions.get(random.nextInt(sessions.size()));
-        String kanamachiId = userIdOf(chosen);
+        // Two participants minimum - a blind bee with nobody to catch is not
+        // a game. AI slots count, so one person plus an AI is enough.
+        if (gameSession.countOccupied() < 2) {
+            broadcast(roomCode, msg(
+                    "type", "ERROR",
+                    "message", "Add another player or an AI before starting."
+            ), null);
+            return;
+        }
+
+        startMatch(roomCode, gameSession);
+    }
+
+    private void startMatch(String roomCode, GameSession gameSession) throws IOException {
+        gameSession.registerAiNames();
+
+        // Anybody in a slot can be blindfolded, AI included. The host's
+        // client plays the AI turns, so a blind AI still grabs and guesses.
+        List<String> candidates = new ArrayList<>();
+        for (RoomSlot slot : gameSession.getSlots()) {
+            if (slot.isOccupied()) candidates.add(slot.getUserId());
+        }
+
+        if (candidates.isEmpty()) return;
+        String kanamachiId = candidates.get(random.nextInt(candidates.size()));
+
         gameSession.setKanamachiUserId(kanamachiId);
         gameSession.setGameState(GameSession.GameState.PLAYING);
         gameSession.setCurrentRound(1);
+        gameSession.markRoundStart();
 
         broadcast(roomCode, msg("type", "GAME_STARTED", "round", 1), null);
         broadcast(roomCode, msg("type", "KANAMACHI_CHANGED", "kanamachiId", kanamachiId), null);
         broadcastScores(roomCode, gameSession);
     }
 
+    // AI opponents are simulated on the clients, so the server never hears
+    // from them directly. The host speaks for them instead: a message may
+    // carry "asPlayerId", and it is honoured only when the sender is the
+    // host and that slot really is an AI. Everything after this point treats
+    // the AI exactly like any other player, so none of the game rules need
+    // to know the difference.
+    private String actingUserId(GameSession gameSession, String senderId, Map<String, Object> data) {
+        Object asPlayer = data.get("asPlayerId");
+        if (asPlayer == null) return senderId;
+
+        String target = asPlayer.toString();
+        if (target.isEmpty()) return senderId;
+
+        if (!senderId.equals(gameSession.getHostUserId())) return senderId;
+
+        RoomSlot slot = gameSession.slotOf(target);
+        if (slot == null || slot.getKind() != RoomSlot.Kind.AI) return senderId;
+
+        return target;
+    }
+
+    private RoomSlot.AiPersonality unusedPersonality(GameSession gameSession) {
+        for (RoomSlot.AiPersonality candidate : RoomSlot.AiPersonality.values()) {
+            boolean taken = false;
+
+            for (RoomSlot slot : gameSession.getSlots()) {
+                if (slot.getPersonality() == candidate) {
+                    taken = true;
+                    break;
+                }
+            }
+
+            if (!taken) return candidate;
+        }
+
+        return RoomSlot.AiPersonality.RANDOM;
+    }
+
+    // A person other than the one given, chosen at random.
+    private String randomHuman(GameSession gameSession, String excludeUserId) {
+        List<String> humans = new ArrayList<>();
+
+        for (RoomSlot slot : gameSession.getSlots()) {
+            if (slot.getKind() != RoomSlot.Kind.HUMAN) continue;
+            if (slot.getUserId() == null) continue;
+            if (slot.getUserId().equals(excludeUserId)) continue;
+
+            humans.add(slot.getUserId());
+        }
+
+        if (humans.isEmpty()) return null;
+        return humans.get(random.nextInt(humans.size()));
+    }
+
+    private Integer asInt(Object value) {
+        if (value instanceof Number) return ((Number) value).intValue();
+        if (value instanceof String) {
+            try { return Integer.parseInt((String) value); } catch (NumberFormatException e) { return null; }
+        }
+        return null;
+    }
+
+    // Matches used to begin the moment a second person connected. The host
+    // starts them now, which is what the room's WAITING state was for and
+    // what makes choosing a character or an AI opponent possible at all.
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws IOException {
         String roomCode = roomCodeOf(session);
@@ -289,7 +489,10 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         broadcast(roomCode, msg("type", "PLAYER_LEFT", "userId", userId), null);
 
         if (gameSession != null) {
-            maybeStartMatch(roomCode);
+            // Free the slot so somebody else can take it, and hand on the
+            // host role if the person who left was holding it.
+            gameSession.release(userId);
+            broadcastLobby(roomCode, gameSession);
         }
     }
 

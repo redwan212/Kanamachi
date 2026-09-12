@@ -12,7 +12,7 @@ public class SoundCueManager : MonoBehaviour
 
     [Header("Diagnostics")]
     [Tooltip("Logs why footsteps are or are not being produced.")]
-    public bool logCueState = true;
+    public bool logCueState = false;
 
     [Header("Debug Display")]
     public bool showDebugLabel = true;
@@ -23,6 +23,11 @@ public class SoundCueManager : MonoBehaviour
     private SoundCueLevel currentLevel = SoundCueLevel.Quiet;
     private Player closestPlayer;
     private float nextLogTime;
+
+    // Where each player was last frame, so a footstep only plays for
+    // somebody who is actually walking.
+    private readonly System.Collections.Generic.Dictionary<Player, Vector2> lastPositions
+            = new System.Collections.Generic.Dictionary<Player, Vector2>();
 
     // Random events (thunder, crowd noise, firecrackers) temporarily scale
     // how loud the footstep cues come through. 1 = no event active.
@@ -84,15 +89,29 @@ public class SoundCueManager : MonoBehaviour
 
         float closestDistance = float.MaxValue;
         closestPlayer = null;
+
         foreach (var player in GetPlayers())
         {
-            if (player == kanamachi) continue;
+            if (player == kanamachi || player == null) continue;
+
+            // Somebody standing still makes no sound. Only moving players
+            // are candidates, which is what makes staying put a real choice
+            // rather than a pointless one.
+            if (!IsMoving(player)) continue;
+
             float dist = Vector2.Distance(kanamachi.transform.position, player.transform.position);
             if (dist < closestDistance)
             {
                 closestDistance = dist;
                 closestPlayer = player;
             }
+        }
+
+        // Nobody is walking, so there is nothing to hear.
+        if (closestPlayer == null)
+        {
+            currentLevel = SoundCueLevel.Quiet;
+            return;
         }
 
         currentLevel = cueSystem.GetCueLevel(closestDistance);
@@ -116,6 +135,25 @@ public class SoundCueManager : MonoBehaviour
     private bool IsOnline
     {
         get { return NetworkGameManager.Instance != null; }
+    }
+
+    [Header("Movement")]
+    [Tooltip("How far a player must move in a frame to count as walking.")]
+    public float movementThreshold = 0.012f;
+
+    private bool IsMoving(Player player)
+    {
+        Vector2 position = player.transform.position;
+
+        if (!lastPositions.TryGetValue(player, out Vector2 previous))
+        {
+            lastPositions[player] = position;
+            return false;
+        }
+
+        lastPositions[player] = position;
+
+        return Vector2.Distance(position, previous) > movementThreshold;
     }
 
     private Player GetKanamachi()

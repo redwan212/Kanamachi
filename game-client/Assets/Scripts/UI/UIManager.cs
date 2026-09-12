@@ -67,8 +67,11 @@ public class UIManager : MonoBehaviour
 
     // Lobby
     private TextMeshProUGUI lobbyCodeLabel;
-    private TextMeshProUGUI lobbyPlayersLabel;
     private TextMeshProUGUI lobbyStatus;
+    private Transform lobbySlotColumn;
+    private Transform characterRow;
+    private Button startButton;
+    private NetworkClient.LobbyState lobby;
 
     void Awake()
     {
@@ -104,7 +107,7 @@ public class UIManager : MonoBehaviour
         if (NetworkClient.Instance == null) return;
 
         NetworkClient.Instance.OnConnected += () => SetLobbyStatus("Connected. Waiting for the match to start...");
-        NetworkClient.Instance.OnPlayerJoined += (id, name) => RefreshRoom();
+        NetworkClient.Instance.OnLobbyState += ApplyLobbyState;
         NetworkClient.Instance.OnGameStarted += round => Show(Screen.InGame);
         NetworkClient.Instance.OnServerError += message => SetLobbyStatus(message);
     }
@@ -269,12 +272,15 @@ public class UIManager : MonoBehaviour
             "<color=#F2C14E>If you can see</color>\n" +
             "  Move with WASD or the arrow keys.\n" +
             "  Stay close enough to be interesting, far enough to be safe.\n" +
-            "  Clap to taunt the blind bee - but a clap gives away where you are.\n\n" +
+            "  Press C to clap and taunt the blind bee - but a clap tells\n" +
+            "  them exactly which side of the courtyard you are on.\n\n" +
             "<color=#F2C14E>If you are blindfolded</color>\n" +
-            "  You hear footsteps, louder as somebody comes nearer.\n" +
-            "  Every character's footsteps sound slightly different.\n" +
-            "  Press Space to grab whoever is closest.\n" +
-            "  Then name them. Guess right and they take the blindfold.\n\n" +
+            "  You hear footsteps, louder as somebody comes nearer, and from\n" +
+            "  the side they are actually on. Standing still makes no sound.\n" +
+            "  Every character walks differently - light or heavy, quick or\n" +
+            "  slow - and the guess screen reminds you which is which.\n" +
+            "  Press Space to grab whoever is closest, then name them.\n" +
+            "  Guess right and they take the blindfold.\n\n" +
             "<color=#F2C14E>Scoring</color>\n" +
             "  Correct guess  +10      Wrong guess  -5      Escaping  +3\n\n" +
             "Four courtyards, twelve rounds. Most points wins.";
@@ -648,32 +654,207 @@ public class UIManager : MonoBehaviour
         GameObject root = NewScreen(Screen.Lobby, "LobbyScreen");
 
         UIBuilder.Label(root.transform, "Waiting in the courtyard", UITheme.HeadingSize,
-                UITheme.TextPrimary, new Vector2(0f, 250f), 800f, 50f);
+                UITheme.TextPrimary, new Vector2(0f, 350f), 900f, 50f);
 
-        GameObject card = UIBuilder.Panel(root.transform, "Card", UITheme.Panel,
-                new Vector2(560f, 380f), new Vector2(0f, 10f));
+        UIBuilder.Label(root.transform, "ROOM CODE", UITheme.SmallSize,
+                UITheme.TextMuted, new Vector2(0f, 296f), 400f, 26f);
 
-        UIBuilder.Label(card.transform, "Room code", UITheme.SmallSize,
-                UITheme.TextMuted, new Vector2(0f, 126f), 460f, 26f);
+        lobbyCodeLabel = UIBuilder.Label(root.transform, "------", 56,
+                UITheme.Accent, new Vector2(0f, 248f), 500f, 66f);
 
-        lobbyCodeLabel = UIBuilder.Label(card.transform, "------", UITheme.TitleSize,
-                UITheme.Accent, new Vector2(0f, 80f), 460f, 60f);
+        // Four rows, one per slot, rebuilt whenever the server sends the
+        // room. Holding a reference to each row and editing it would mean
+        // tracking which row belongs to which slot; rebuilding is simpler
+        // and happens only when something actually changes.
+        GameObject slotsPanel = UIBuilder.Panel(root.transform, "Slots", UITheme.Panel,
+                new Vector2(720f, 260f), new Vector2(0f, 70f));
+        lobbySlotColumn = slotsPanel.transform;
 
-        lobbyPlayersLabel = UIBuilder.Label(card.transform, "", UITheme.BodySize,
-                UITheme.TextPrimary, new Vector2(0f, -10f), 460f, 120f);
+        UIBuilder.Label(root.transform, "CHOOSE YOUR CHARACTER", UITheme.SmallSize,
+                UITheme.TextMuted, new Vector2(0f, -80f), 600f, 26f);
 
-        UIBuilder.TextButton(card.transform, "Refresh", new Vector2(-90f, -120f),
-                RefreshRoom, false, 170f);
+        GameObject characters = new GameObject("Characters", typeof(RectTransform));
+        characters.transform.SetParent(root.transform, false);
+        RectTransform charactersRect = characters.GetComponent<RectTransform>();
+        charactersRect.sizeDelta = new Vector2(900f, 90f);
+        charactersRect.anchoredPosition = new Vector2(0f, -136f);
+        characterRow = characters.transform;
 
-        UIBuilder.TextButton(card.transform, "Leave", new Vector2(90f, -120f), () =>
+        startButton = UIBuilder.TextButton(root.transform, "START MATCH",
+                new Vector2(0f, -250f), OnStartMatchClicked, true, 320f);
+
+        UIBuilder.TextButton(root.transform, "Leave", new Vector2(0f, -318f), () =>
         {
             if (NetworkClient.Instance != null) NetworkClient.Instance.Disconnect();
             SessionData.ClearRoom();
             Show(Screen.MainMenu);
-        }, false, 170f);
+        }, false, 240f);
 
         lobbyStatus = UIBuilder.Label(root.transform, "", UITheme.SmallSize,
-                UITheme.TextMuted, new Vector2(0f, -230f), 800f, 60f);
+                UITheme.TextMuted, new Vector2(0f, -380f), 900f, 40f);
+
+        BuildCharacterButtons();
+    }
+
+    // One button per character in the pool the game actually uses, so the
+    // lobby and the match can never disagree about what exists.
+    private void BuildCharacterButtons()
+    {
+        if (characterRow == null) return;
+
+        Character[] pool = NetworkGameManager.Instance != null
+                ? NetworkGameManager.Instance.characterPool
+                : null;
+
+        if (pool == null) return;
+
+        float spacing = 150f;
+        float startX = -(pool.Length - 1) * spacing * 0.5f;
+
+        for (int i = 0; i < pool.Length; i++)
+        {
+            Character character = pool[i];
+            if (character == null) continue;
+
+            string name = character.characterName;
+
+            UIBuilder.TextButton(characterRow, name, new Vector2(startX + i * spacing, 0f),
+                    () =>
+                    {
+                        if (NetworkClient.Instance != null)
+                        {
+                            NetworkClient.Instance.SendCharacterChoice(name);
+                        }
+                    },
+                    false, 140f);
+        }
+    }
+
+    private void OnStartMatchClicked()
+    {
+        if (NetworkClient.Instance != null) NetworkClient.Instance.SendStartMatch();
+    }
+
+    // Called whenever the server sends the room.
+    public void ApplyLobbyState(NetworkClient.LobbyState state)
+    {
+        lobby = state;
+        if (lobbySlotColumn == null || state == null) return;
+
+        foreach (Transform child in lobbySlotColumn)
+        {
+            // The panel's own label children are rebuilt too, so everything
+            // inside is cleared and redrawn together.
+            Destroy(child.gameObject);
+        }
+
+        bool isHost = SessionData.UserId == state.hostUserId;
+        float y = 92f;
+
+        foreach (NetworkClient.LobbySlot slot in state.slots)
+        {
+            DrawSlotRow(slot, y, isHost);
+            y -= 58f;
+        }
+
+        if (startButton != null)
+        {
+            // Only the host starts, and only once there is somebody to play
+            // against - a person or an AI.
+            startButton.gameObject.SetActive(isHost);
+            startButton.interactable = state.occupied >= 2;
+        }
+
+        SetLobbyStatus(isHost
+                ? (state.occupied >= 2
+                        ? "Press start when everyone is ready."
+                        : "Share the room code, or fill a slot with an AI.")
+                : "Waiting for the host to start.");
+    }
+
+    private void DrawSlotRow(NetworkClient.LobbySlot slot, float y, bool isHost)
+    {
+        bool isMe = slot.userId == SessionData.UserId;
+
+        string label;
+        Color colour;
+
+        if (slot.kind == "HUMAN")
+        {
+            string chosen = string.IsNullOrEmpty(slot.character) ? "choosing..." : slot.character;
+            label = $"{slot.username}   -   {chosen}";
+            colour = isMe ? UITheme.Accent : UITheme.TextPrimary;
+        }
+        else if (slot.kind == "AI")
+        {
+            label = $"AI   -   {Readable(slot.personality)}";
+            colour = UITheme.TextMuted;
+        }
+        else
+        {
+            label = "empty";
+            colour = UITheme.TextMuted;
+        }
+
+        UIBuilder.Label(lobbySlotColumn, label, UITheme.BodySize, colour,
+                new Vector2(-90f, y), 420f, 44f, TextAlignmentOptions.Left);
+
+        // The host can turn any non-human slot into an AI, or clear it.
+        if (!isHost || slot.kind == "HUMAN") return;
+
+        int index = slot.index;
+
+        // An empty slot lets the server choose one the room does not have;
+        // an existing AI cycles through the four.
+        string next = slot.kind == "AI" ? NextPersonality(slot.personality) : "NEXT";
+
+        UIBuilder.TextButton(lobbySlotColumn,
+                slot.kind == "AI" ? "change" : "add AI",
+                new Vector2(210f, y), () =>
+                {
+                    if (NetworkClient.Instance != null)
+                    {
+                        NetworkClient.Instance.SendAiSlot(index, next);
+                    }
+                },
+                false, 130f);
+
+        if (slot.kind == "AI")
+        {
+            UIBuilder.TextButton(lobbySlotColumn, "remove", new Vector2(310f, y), () =>
+            {
+                if (NetworkClient.Instance != null)
+                {
+                    NetworkClient.Instance.SendAiSlot(index, "");
+                }
+            }, false, 120f);
+        }
+    }
+
+    // Cycles through the four personalities, so one button covers all of
+    // them without needing a dropdown.
+    private string NextPersonality(string current)
+    {
+        switch (current)
+        {
+            case "AGGRESSIVE": return "SNEAKY";
+            case "SNEAKY": return "CAREFUL";
+            case "CAREFUL": return "RANDOM";
+            case "RANDOM": return "AGGRESSIVE";
+            default: return "AGGRESSIVE";
+        }
+    }
+
+    private string Readable(string personality)
+    {
+        switch (personality)
+        {
+            case "AGGRESSIVE": return "bold";
+            case "SNEAKY": return "sneaky";
+            case "CAREFUL": return "careful";
+            case "RANDOM": return "unpredictable";
+            default: return "-";
+        }
     }
 
     private void EnterLobby(ApiClient.RoomResponse room)
@@ -681,11 +862,7 @@ public class UIManager : MonoBehaviour
         Show(Screen.Lobby);
 
         lobbyCodeLabel.text = room.roomCode;
-        UpdatePlayerList(room);
-
-        SetLobbyStatus(SessionData.IsHost
-                ? "Share this code. The match starts when someone joins."
-                : "Joined. Waiting for the match to start...");
+        SetLobbyStatus("Connecting...");
 
         if (autoConnectFromLobby && NetworkClient.Instance != null)
         {
@@ -693,30 +870,8 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    private void RefreshRoom()
-    {
-        if (!SessionData.IsInRoom) return;
-
-        ApiClient.Instance.GetRoom(SessionData.RoomCode,
-                room => UpdatePlayerList(room),
-                error => SetLobbyStatus(error));
-    }
-
-    private void UpdatePlayerList(ApiClient.RoomResponse room)
-    {
-        if (lobbyPlayersLabel == null || room == null) return;
-
-        System.Text.StringBuilder builder = new System.Text.StringBuilder();
-        builder.AppendLine($"Players {room.players.Length}/{room.maxPlayers}");
-        builder.AppendLine();
-
-        foreach (string player in room.players)
-        {
-            builder.AppendLine(player);
-        }
-
-        lobbyPlayersLabel.text = builder.ToString();
-    }
+    // The lobby is pushed by the server now, so there is nothing to poll
+    // for and no player list to rebuild from a REST response.
 
     private void SetLobbyStatus(string message)
     {

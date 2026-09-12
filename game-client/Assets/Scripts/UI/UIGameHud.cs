@@ -139,7 +139,7 @@ public class UIGameHud : MonoBehaviour
         row.transform.SetParent(guessRoot.transform, false);
 
         RectTransform rowRect = row.GetComponent<RectTransform>();
-        rowRect.sizeDelta = new Vector2(1400f, 90f);
+        rowRect.sizeDelta = new Vector2(1400f, 120f);
         rowRect.anchoredPosition = new Vector2(0f, 20f);
 
         HorizontalLayoutGroup layout = row.GetComponent<HorizontalLayoutGroup>();
@@ -262,8 +262,17 @@ public class UIGameHud : MonoBehaviour
         toastUntil = Time.time + seconds;
     }
 
-    // options: userId -> display name
-    public void ShowGuessPanel(List<KeyValuePair<string, string>> options,
+    // One option on the guess screen: who they are, and what they sound
+    // like. The hint is the whole point - without it the Kanamachi is
+    // picking a name at random rather than matching a name to a sound.
+    public struct GuessOption
+    {
+        public string userId;
+        public string displayName;
+        public string hint;
+    }
+
+    public void ShowGuessPanel(List<GuessOption> options,
                                System.Action<string> onGuess)
     {
         if (guessRoot == null) return;
@@ -273,15 +282,27 @@ public class UIGameHud : MonoBehaviour
             Destroy(child.gameObject);
         }
 
-        foreach (var option in options)
+        foreach (GuessOption option in options)
         {
-            string userId = option.Key;
-            Button button = UIBuilder.TextButton(guessButtonRow, option.Value, Vector2.zero,
-                    () => onGuess(userId), true, 260f);
+            string userId = option.userId;
 
-            LayoutElement element = button.gameObject.AddComponent<LayoutElement>();
-            element.preferredWidth = 260f;
-            element.preferredHeight = UITheme.ButtonHeight;
+            // Name and hint are stacked in one column so they move together
+            // and stay aligned however many options there are.
+            GameObject column = new GameObject("Option", typeof(RectTransform));
+            column.transform.SetParent(guessButtonRow, false);
+
+            RectTransform columnRect = column.GetComponent<RectTransform>();
+            columnRect.sizeDelta = new Vector2(260f, 108f);
+
+            LayoutElement columnLayout = column.AddComponent<LayoutElement>();
+            columnLayout.preferredWidth = 260f;
+            columnLayout.preferredHeight = 108f;
+
+            UIBuilder.TextButton(column.transform, option.displayName,
+                    new Vector2(0f, 24f), () => onGuess(userId), true, 260f);
+
+            UIBuilder.Label(column.transform, option.hint, UITheme.SmallSize,
+                    UITheme.TextMuted, new Vector2(0f, -32f), 260f, 34f);
         }
 
         guessPrompt.text = "Who did you catch?";

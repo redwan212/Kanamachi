@@ -7,10 +7,22 @@ using UnityEngine;
 // NetworkRemotePlayer being driven by those reports.
 public class NetworkLocalPlayer : Player
 {
+    [Header("Tease")]
+    [Tooltip("Clapping taunts the blindfolded player - and tells them exactly where you are.")]
+    public KeyCode clapKey = KeyCode.C;
+    public float clapCooldown = 1.5f;
+
+    private float clapReadyAt;
+
     // Accepts both control schemes, since online there is only one player
     // per keyboard and no reason to split the keys.
     protected override void UpdateMovementInput()
     {
+        // Handled here rather than in an Update of its own: Player.Update is
+        // not virtual, so declaring one in this class would hide it and stop
+        // the player moving at all.
+        CheckClap();
+
         float horizontal = 0f;
         float vertical = 0f;
 
@@ -20,6 +32,28 @@ public class NetworkLocalPlayer : Player
         if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow)) vertical = -1f;
 
         moveInput = new Vector2(horizontal, vertical).normalized;
+    }
+
+    // Clapping is the one way a sighted player gives themselves away on
+    // purpose. It is only worth doing because the blindfolded player cannot
+    // tell teasing from carelessness.
+    private void CheckClap()
+    {
+        if (IsBlindfolded()) return;
+        if (Time.time < clapReadyAt) return;
+        if (!Input.GetKeyDown(clapKey)) return;
+
+        clapReadyAt = Time.time + clapCooldown;
+
+        if (NetworkClient.Instance != null) NetworkClient.Instance.SendClap();
+
+        // The server does not echo a clap back to whoever made it, so
+        // without this the person clapping hears nothing and assumes the
+        // key is broken.
+        if (GameAudio.Instance != null)
+        {
+            GameAudio.Instance.PlayClap(rb.position, rb.position);
+        }
     }
 
     protected override void FixedUpdate()

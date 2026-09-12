@@ -36,7 +36,7 @@ public class GameAudio : MonoBehaviour
 
     [Header("Diagnostics")]
     [Tooltip("Logs the first few footsteps so a silent game can be told apart from a game that is not trying to play anything.")]
-    public bool logFirstFootsteps = true;
+    public bool logFirstFootsteps = false;
 
     private int footstepsLogged;
 

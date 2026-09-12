@@ -679,6 +679,9 @@ MonoBehaviour:
   levelManager: {fileID: 1179172386}
   roundsPerLevel: 3
   visionController: {fileID: 413639383}
+  aiReportInterval: 0.1
+  aiGuessDelay: 1.6
+  aiPlayerPrefab: {fileID: 0}
   dustSprite: {fileID: -4363183719405001409, guid: e99716ad90d20e144ac7fbd659f62bc3, type: 3}
 --- !u!114 &413639385
 MonoBehaviour:
@@ -746,11 +749,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 070c0e6c71a169d40b580792e8d9711f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameAudio
-  footstepClip: {fileID: 0}
-  clapClip: {fileID: 0}
-  catchClip: {fileID: 0}
-  correctGuessClip: {fileID: 0}
-  wrongGuessClip: {fileID: 0}
+  footstepClip: {fileID: 8300000, guid: e159c48b13add13479fcc91e5159b7fc, type: 3}
+  clapClip: {fileID: 8300000, guid: 5ee79ca68b828ba48a54934c4105e72b, type: 3}
+  catchClip: {fileID: 8300000, guid: ab957a4dbcdce31469527259fe947eef, type: 3}
+  correctGuessClip: {fileID: 8300000, guid: bf96a0ae00194194f873eb14929b3b07, type: 3}
+  wrongGuessClip: {fileID: 8300000, guid: 483fb0b678d690346b9351f3972ddbd4, type: 3}
   courtyardAmbience: {fileID: 0}
   melaAmbience: {fileID: 0}
   stormAmbience: {fileID: 0}

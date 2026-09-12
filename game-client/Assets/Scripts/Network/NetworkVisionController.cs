@@ -45,7 +45,7 @@ public class NetworkVisionController : MonoBehaviour
 
     [Header("Diagnostics")]
     [Tooltip("Logs what the global light is actually set to, to catch anything else changing it.")]
-    public bool logLightState = true;
+    public bool logLightState = false;
 
     private Player trackedPlayer;
     private bool trackedIsKanamachi;
