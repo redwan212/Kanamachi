@@ -40,6 +40,11 @@ public class LevelManager : MonoBehaviour
             return;
         }
 
+        // Online, the match decides when the first level begins. Loading it
+        // here as well made the opening story chapter flash over the menu
+        // before anybody had joined a room.
+        if (NetworkGameManager.Instance != null) return;
+
         LoadLevel(0);
     }
 

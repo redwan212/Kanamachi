@@ -15,14 +15,33 @@ public class UIManager : MonoBehaviour
 
     public enum Screen
     {
+        Title,
         Login,
         MainMenu,
         Room,
         Lobby,
         Leaderboard,
         Profile,
+        HowToPlay,
+        Settings,
         InGame
     }
+
+    [Header("Typography")]
+    [Tooltip("A pixel font asset. Left empty the default font is used, which looks like a document rather than a game.")]
+    public TMP_FontAsset pixelFont;
+
+    [Header("Button frames")]
+    [Tooltip("Optional pixel-art frames. Left empty, buttons use a flat fill.")]
+    public Sprite goldButtonSprite;
+    public Sprite plainButtonSprite;
+
+    [Tooltip("Thin ornamental rule placed above and below the title.")]
+    public Sprite dividerSprite;
+
+    [Header("Landing artwork")]
+    [Tooltip("Optional. Draws the game's own key image behind the login and menu screens.")]
+    public UILandingArt landingArt;
 
     [Header("Behaviour")]
     [Tooltip("Connects to the room's WebSocket as soon as the host or guest is ready.")]
@@ -36,6 +55,7 @@ public class UIManager : MonoBehaviour
     private TMP_InputField usernameField;
     private TMP_InputField passwordField;
     private TextMeshProUGUI loginStatus;
+    private TextMeshProUGUI signedInLabel;
 
     // Room
     private TMP_InputField roomCodeField;
@@ -59,15 +79,24 @@ public class UIManager : MonoBehaviour
         }
 
         Instance = this;
+
+        // Set before any screen is built, so every label picks it up.
+        UITheme.Font = pixelFont;
+        UITheme.GoldButtonSprite = goldButtonSprite;
+        UITheme.PlainButtonSprite = plainButtonSprite;
+
         BuildCanvas();
+        BuildTitleScreen();
         BuildLoginScreen();
         BuildMainMenuScreen();
         BuildRoomScreen();
         BuildLobbyScreen();
         BuildLeaderboardScreen();
         BuildProfileScreen();
+        BuildHowToPlayScreen();
+        BuildSettingsScreen();
 
-        Show(Screen.Login);
+        Show(Screen.Title);
     }
 
     void Start()
@@ -85,6 +114,13 @@ public class UIManager : MonoBehaviour
     public void Show(Screen screen)
     {
         current = screen;
+
+        if (screen == Screen.MainMenu && signedInLabel != null)
+        {
+            signedInLabel.text = SessionData.IsLoggedIn
+                    ? $"signed in as {SessionData.Username}"
+                    : "";
+        }
 
         foreach (var pair in screens)
         {
@@ -111,7 +147,7 @@ public class UIManager : MonoBehaviour
 
         // uGUI needs an EventSystem to deliver clicks; scenes built before
         // any UI existed will not have one.
-        if (Object.FindFirstObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
+        if (Object.FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
         {
             GameObject eventSystem = new GameObject("EventSystem",
                     typeof(UnityEngine.EventSystems.EventSystem),
@@ -129,31 +165,211 @@ public class UIManager : MonoBehaviour
 
     // ---------- Login ----------
 
+    // ---------- Title ----------
+    //
+    // The first thing anyone sees. It is a title screen rather than a form:
+    // the artwork carries the left half, the title and menu the right, and
+    // signing in only appears once PLAY has been pressed. The game should
+    // announce itself before it asks for anything.
+    private void BuildTitleScreen()
+    {
+        GameObject root = NewScreen(Screen.Title, "TitleScreen");
+
+        if (landingArt != null) landingArt.Build(root.transform);
+
+        UIBuilder.Label(root.transform, "KANAMACHI", 88,
+                UITheme.Accent, new Vector2(540f, 290f), 780f, 120f);
+
+        UIBuilder.Label(root.transform, "THE BLINDFOLD CAN'T SEE.  CAN YOU?",
+                UITheme.SmallSize, UITheme.TextMuted, new Vector2(540f, 208f), 780f, 36f);
+
+        if (dividerSprite != null)
+        {
+            AddDivider(root.transform, new Vector2(540f, 370f), 420f);
+            AddDivider(root.transform, new Vector2(540f, 170f), 340f);
+        }
+
+        // PLAY is the one filled button on the screen, so the eye lands on it.
+        UIBuilder.TextButton(root.transform, "PLAY", new Vector2(540f, 90f),
+                OnPlayClicked, true, 320f);
+
+        UIBuilder.TextButton(root.transform, "HOW TO PLAY", new Vector2(540f, 6f),
+                () => Show(Screen.HowToPlay), false, 290f);
+
+        UIBuilder.TextButton(root.transform, "SETTINGS", new Vector2(540f, -62f),
+                () => Show(Screen.Settings), false, 290f);
+
+        UIBuilder.TextButton(root.transform, "EXIT", new Vector2(540f, -130f),
+                QuitGame, false, 290f);
+
+        UIBuilder.Label(root.transform, "ONLINE MULTIPLAYER  -  2-4 PLAYERS",
+                UITheme.SmallSize, UITheme.TextMuted, new Vector2(540f, -250f), 780f, 32f);
+
+        // Bottom-right, low priority.
+        TextMeshProUGUI version = UIBuilder.Label(root.transform, "V1.0",
+                UITheme.SmallSize, UITheme.TextMuted, Vector2.zero, 140f, 30f,
+                TextAlignmentOptions.Right);
+
+        RectTransform versionRect = version.rectTransform;
+        versionRect.anchorMin = versionRect.anchorMax = new Vector2(1f, 0f);
+        versionRect.pivot = new Vector2(1f, 0f);
+        versionRect.anchoredPosition = new Vector2(-40f, 30f);
+    }
+
+    // A thin gold rule with a diamond in the middle, above and below the
+    // title. Cheap, and it stops the text floating in empty space.
+    private void AddDivider(Transform parent, Vector2 position, float width)
+    {
+        GameObject obj = new GameObject("Divider", typeof(RectTransform), typeof(Image));
+        obj.transform.SetParent(parent, false);
+
+        Image image = obj.GetComponent<Image>();
+        image.sprite = dividerSprite;
+        image.color = new Color(1f, 1f, 1f, 0.75f);
+        image.preserveAspect = true;
+        image.raycastTarget = false;
+
+        RectTransform rect = obj.GetComponent<RectTransform>();
+        float height = width * (dividerSprite.rect.height / dividerSprite.rect.width);
+        rect.sizeDelta = new Vector2(width, height);
+        rect.anchoredPosition = position;
+    }
+
+    // Already signed in, go straight to the menu; otherwise ask first.
+    private void OnPlayClicked()
+    {
+        Show(SessionData.IsLoggedIn ? Screen.MainMenu : Screen.Login);
+    }
+
+    private void QuitGame()
+    {
+#if UNITY_EDITOR
+        // Quitting does nothing in the editor, so stop play mode instead.
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
+    }
+
+    // ---------- How to play ----------
+
+    private void BuildHowToPlayScreen()
+    {
+        GameObject root = NewScreen(Screen.HowToPlay, "HowToPlayScreen");
+
+        UIBuilder.Label(root.transform, "How to play", UITheme.HeadingSize,
+                UITheme.Accent, new Vector2(0f, 330f), 900f, 60f);
+
+        GameObject card = UIBuilder.Panel(root.transform, "Card", UITheme.Panel,
+                new Vector2(900f, 500f), new Vector2(0f, 20f));
+
+        string body =
+            "One player is the <color=#C8362B>Kanamachi</color> - the blind bee.\n" +
+            "They wear a gamcha over their eyes and cannot see the courtyard.\n\n" +
+            "<color=#F2C14E>If you can see</color>\n" +
+            "  Move with WASD or the arrow keys.\n" +
+            "  Stay close enough to be interesting, far enough to be safe.\n" +
+            "  Clap to taunt the blind bee - but a clap gives away where you are.\n\n" +
+            "<color=#F2C14E>If you are blindfolded</color>\n" +
+            "  You hear footsteps, louder as somebody comes nearer.\n" +
+            "  Every character's footsteps sound slightly different.\n" +
+            "  Press Space to grab whoever is closest.\n" +
+            "  Then name them. Guess right and they take the blindfold.\n\n" +
+            "<color=#F2C14E>Scoring</color>\n" +
+            "  Correct guess  +10      Wrong guess  -5      Escaping  +3\n\n" +
+            "Four courtyards, twelve rounds. Most points wins.";
+
+        UIBuilder.Label(card.transform, body, UITheme.BodySize, UITheme.TextPrimary,
+                new Vector2(0f, 0f), 840f, 460f, TextAlignmentOptions.TopLeft);
+
+        UIBuilder.TextButton(root.transform, "Back", new Vector2(0f, -330f),
+                () => Show(Screen.Title), false, 240f);
+    }
+
+    // ---------- Settings ----------
+
+    private void BuildSettingsScreen()
+    {
+        GameObject root = NewScreen(Screen.Settings, "SettingsScreen");
+
+        UIBuilder.Label(root.transform, "Settings", UITheme.HeadingSize,
+                UITheme.Accent, new Vector2(0f, 270f), 900f, 60f);
+
+        GameObject card = UIBuilder.Panel(root.transform, "Card", UITheme.Panel,
+                new Vector2(620f, 340f), new Vector2(0f, 20f));
+
+        UIBuilder.Label(card.transform, "Effects volume", UITheme.BodySize,
+                UITheme.TextPrimary, new Vector2(-150f, 100f), 300f, 34f,
+                TextAlignmentOptions.Left);
+        BuildVolumeRow(card.transform, 60f, true);
+
+        UIBuilder.Label(card.transform, "Ambience volume", UITheme.BodySize,
+                UITheme.TextPrimary, new Vector2(-150f, 0f), 300f, 34f,
+                TextAlignmentOptions.Left);
+        BuildVolumeRow(card.transform, -40f, false);
+
+        UIBuilder.Label(card.transform, "Sound is the main way a blindfolded player finds anyone.",
+                UITheme.SmallSize, UITheme.TextMuted, new Vector2(0f, -120f), 560f, 40f);
+
+        UIBuilder.TextButton(root.transform, "Back", new Vector2(0f, -270f),
+                () => Show(Screen.Title), false, 240f);
+    }
+
+    // Stepped rather than a slider, because five clear levels are easier to
+    // set with a mouse than a thin bar, and they survive any resolution.
+    private void BuildVolumeRow(Transform parent, float y, bool effects)
+    {
+        for (int i = 0; i <= 4; i++)
+        {
+            int level = i;
+            float value = level / 4f;
+
+            UIBuilder.TextButton(parent, level == 0 ? "off" : level.ToString(),
+                    new Vector2(-120f + level * 70f, y),
+                    () =>
+                    {
+                        if (GameAudio.Instance == null) return;
+
+                        if (effects) GameAudio.Instance.effectsVolume = value;
+                        else GameAudio.Instance.ambienceVolume = value;
+                    },
+                    false, 60f);
+        }
+    }
+
     private void BuildLoginScreen()
     {
         GameObject root = NewScreen(Screen.Login, "LoginScreen");
 
-        UIBuilder.Label(root.transform, "KANAMACHI", UITheme.TitleSize,
-                UITheme.Accent, new Vector2(0f, 260f), 800f, 70f);
+        // The artwork sits behind everything; the form is pushed to the
+        // right so the light circle is not covered by it.
+        if (landingArt != null) landingArt.Build(root.transform);
 
-        UIBuilder.Label(root.transform, "The blind bee is looking for you",
-                UITheme.SmallSize, UITheme.TextMuted, new Vector2(0f, 210f), 800f, 30f);
+        UIBuilder.Label(root.transform, "KANAMACHI", 76,
+                UITheme.Accent, new Vector2(540f, 250f), 700f, 100f);
 
-        GameObject card = UIBuilder.Panel(root.transform, "Card", UITheme.Panel,
-                new Vector2(480f, 380f), new Vector2(0f, -30f));
+        UIBuilder.Label(root.transform, "the blind bee is listening for you",
+                UITheme.SmallSize, UITheme.TextMuted, new Vector2(540f, 190f), 700f, 34f);
+
+        GameObject card = UIBuilder.Panel(root.transform, "Card",
+                new Color(UITheme.Panel.r, UITheme.Panel.g, UITheme.Panel.b, 0.94f),
+                new Vector2(460f, 360f), new Vector2(540f, -60f));
 
         UIBuilder.Label(card.transform, "Sign in", UITheme.HeadingSize,
-                UITheme.TextPrimary, new Vector2(0f, 140f), 440f, 50f);
+                UITheme.TextPrimary, new Vector2(0f, 130f), 420f, 50f);
 
-        usernameField = UIBuilder.InputField(card.transform, "Username", new Vector2(0f, 66f));
-        passwordField = UIBuilder.InputField(card.transform, "Password", new Vector2(0f, 4f), true);
+        usernameField = UIBuilder.InputField(card.transform, "Username", new Vector2(0f, 58f));
+        passwordField = UIBuilder.InputField(card.transform, "Password", new Vector2(0f, -2f), true);
 
-        UIBuilder.TextButton(card.transform, "Log in", new Vector2(0f, -70f), OnLoginClicked);
+        UIBuilder.TextButton(card.transform, "Log in", new Vector2(0f, -74f), OnLoginClicked);
         UIBuilder.TextButton(card.transform, "Create an account", new Vector2(0f, -140f),
                 OnRegisterClicked, false);
 
         loginStatus = UIBuilder.Label(root.transform, "", UITheme.SmallSize,
-                UITheme.Danger, new Vector2(0f, -220f), 700f, 60f);
+                UITheme.Danger, new Vector2(540f, -280f), 640f, 60f);
+
+        UIBuilder.MenuItem(root.transform, "BACK", new Vector2(540f, -340f),
+                () => Show(Screen.Title));
     }
 
     private void OnLoginClicked()
@@ -209,31 +425,36 @@ public class UIManager : MonoBehaviour
     {
         GameObject root = NewScreen(Screen.MainMenu, "MainMenuScreen");
 
-        UIBuilder.Label(root.transform, "KANAMACHI", UITheme.TitleSize,
-                UITheme.Accent, new Vector2(0f, 230f), 800f, 70f);
+        if (landingArt != null) landingArt.Build(root.transform);
 
-        UIBuilder.TextButton(root.transform, "Create a room", new Vector2(0f, 80f),
+        UIBuilder.Label(root.transform, "KANAMACHI", 64,
+                UITheme.Accent, new Vector2(540f, 250f), 700f, 90f);
+
+        signedInLabel = UIBuilder.Label(root.transform, "", UITheme.SmallSize,
+                UITheme.TextMuted, new Vector2(540f, 196f), 700f, 30f);
+
+        UIBuilder.TextButton(root.transform, "Create a room", new Vector2(540f, 80f),
                 () => { Show(Screen.Room); OnCreateRoomClicked(); });
 
-        UIBuilder.TextButton(root.transform, "Join a room", new Vector2(0f, 14f),
+        UIBuilder.TextButton(root.transform, "Join a room", new Vector2(540f, 14f),
                 () => Show(Screen.Room), false);
 
-        UIBuilder.TextButton(root.transform, "Leaderboard", new Vector2(0f, -52f), () =>
+        UIBuilder.TextButton(root.transform, "Leaderboard", new Vector2(540f, -52f), () =>
         {
             Show(Screen.Leaderboard);
             LoadLeaderboard("score");
         }, false);
 
-        UIBuilder.TextButton(root.transform, "My profile", new Vector2(0f, -118f), () =>
+        UIBuilder.TextButton(root.transform, "My profile", new Vector2(540f, -118f), () =>
         {
             Show(Screen.Profile);
             LoadProfile();
         }, false);
 
-        UIBuilder.TextButton(root.transform, "Log out", new Vector2(0f, -210f), () =>
+        UIBuilder.TextButton(root.transform, "Log out", new Vector2(540f, -210f), () =>
         {
             SessionData.ClearAll();
-            Show(Screen.Login);
+            Show(Screen.Title);
         }, false);
     }
 

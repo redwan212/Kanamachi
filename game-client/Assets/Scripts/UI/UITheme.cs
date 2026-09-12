@@ -8,6 +8,22 @@ using UnityEngine;
 // from here, which means restyling the whole game is a single edit.
 public static class UITheme
 {
+    // Assigned once by UIManager. When a pixel font is supplied every label
+    // picks it up, which is the single biggest change to how the interface
+    // reads: the default font belongs to a document, not to a game.
+    public static TMPro.TMP_FontAsset Font;
+
+    // Chunky outline and a hard drop shadow, so text sits on the artwork
+    // instead of floating over it.
+    public static float OutlineWidth = 0.16f;
+    public static UnityEngine.Color OutlineColour = new UnityEngine.Color32(0x10, 0x14, 0x24, 255);
+    public static float ShadowOffset = 0.45f;
+
+    // Pixel-art frames for buttons, assigned by UIManager. Without them
+    // buttons fall back to a plain filled rectangle, which still works.
+    public static UnityEngine.Sprite GoldButtonSprite;
+    public static UnityEngine.Sprite PlainButtonSprite;
+
     public static readonly Color Background = new Color32(0x16, 0x1C, 0x33, 255);
     public static readonly Color Panel = new Color32(0x1F, 0x27, 0x42, 255);
     public static readonly Color PanelSoft = new Color32(0x28, 0x31, 0x50, 255);
