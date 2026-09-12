@@ -107,6 +107,10 @@ public class NetworkGameManager : MonoBehaviour
         {
             if (isGuessing || matchOver) return true;
             if (roundStartTimer > 0f) return true;
+
+            // Somebody reading the pause menu should not be walking into a
+            // wall while they do it.
+            if (UIGameHud.Instance != null && UIGameHud.Instance.IsPaused) return true;
             if (StoryManager.Instance != null && StoryManager.Instance.IsShowing) return true;
             return false;
         }

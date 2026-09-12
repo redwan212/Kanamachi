@@ -272,15 +272,12 @@ public class UIManager : MonoBehaviour
             "<color=#F2C14E>If you can see</color>\n" +
             "  Move with WASD or the arrow keys.\n" +
             "  Stay close enough to be interesting, far enough to be safe.\n" +
-            "  Press C to clap and taunt the blind bee - but a clap tells\n" +
-            "  them exactly which side of the courtyard you are on.\n\n" +
+            "  Clap to taunt the blind bee - but a clap gives away where you are.\n\n" +
             "<color=#F2C14E>If you are blindfolded</color>\n" +
-            "  You hear footsteps, louder as somebody comes nearer, and from\n" +
-            "  the side they are actually on. Standing still makes no sound.\n" +
-            "  Every character walks differently - light or heavy, quick or\n" +
-            "  slow - and the guess screen reminds you which is which.\n" +
-            "  Press Space to grab whoever is closest, then name them.\n" +
-            "  Guess right and they take the blindfold.\n\n" +
+            "  You hear footsteps, louder as somebody comes nearer.\n" +
+            "  Every character's footsteps sound slightly different.\n" +
+            "  Press Space to grab whoever is closest.\n" +
+            "  Then name them. Guess right and they take the blindfold.\n\n" +
             "<color=#F2C14E>Scoring</color>\n" +
             "  Correct guess  +10      Wrong guess  -5      Escaping  +3\n\n" +
             "Four courtyards, twelve rounds. Most points wins.";
@@ -642,7 +639,11 @@ public class UIManager : MonoBehaviour
         roomStatus.text = "Joining...";
         roomStatus.color = UITheme.TextMuted;
 
-        ApiClient.Instance.JoinRoom(roomCodeField.text,
+        // Codes get read off one screen and typed into another, so spaces
+        // and case are forgiven rather than turned into "room not found".
+        string code = roomCodeField.text.Replace(" ", "").Trim().ToUpperInvariant();
+
+        ApiClient.Instance.JoinRoom(code,
                 room => EnterLobby(room),
                 error => { roomStatus.text = error; roomStatus.color = UITheme.Danger; });
     }
@@ -861,7 +862,7 @@ public class UIManager : MonoBehaviour
     {
         Show(Screen.Lobby);
 
-        lobbyCodeLabel.text = room.roomCode;
+        lobbyCodeLabel.text = Spaced(room.roomCode);
         SetLobbyStatus("Connecting...");
 
         if (autoConnectFromLobby && NetworkClient.Instance != null)
@@ -872,6 +873,14 @@ public class UIManager : MonoBehaviour
 
     // The lobby is pushed by the server now, so there is nothing to poll
     // for and no player list to rebuild from a REST response.
+
+    // "XY34K7" reads as "X Y 3 4 K 7", which is how somebody says it out
+    // loud to the person next to them.
+    private string Spaced(string code)
+    {
+        if (string.IsNullOrEmpty(code)) return code;
+        return string.Join(" ", code.ToCharArray());
+    }
 
     private void SetLobbyStatus(string message)
     {

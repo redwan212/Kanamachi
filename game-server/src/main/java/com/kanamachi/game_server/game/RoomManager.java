@@ -12,7 +12,13 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class RoomManager {
 
-    private static final String ROOM_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    // Deliberately missing 0, O, 1, I, L, 2, Z, 5, S, 8 and B.
+    //
+    // A room code is read off one screen and typed into another, usually in
+    // a pixel font where those pairs are nearly identical. Removing them
+    // costs a little entropy and removes a whole category of "room not
+    // found" that is nobody's mistake.
+    private static final String ROOM_CODE_CHARS = "ACDEFGHJKMNPQRTUVWXY34679";
 
     private final Map<String, GameRoom> roomsByCode = new ConcurrentHashMap<>();
     private final Random random = new Random();

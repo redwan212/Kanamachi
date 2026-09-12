@@ -18,6 +18,7 @@ public class UIGameHud : MonoBehaviour
     private GameObject hudRoot;
     private GameObject guessRoot;
     private GameObject resultRoot;
+    private GameObject pauseRoot;
 
     private TextMeshProUGUI levelLabel;
     private TextMeshProUGUI roundLabel;
@@ -49,12 +50,21 @@ public class UIGameHud : MonoBehaviour
         BuildHud();
         BuildGuessPanel();
         BuildResultPanel();
+        BuildPausePanel();
 
         SetVisible(false);
     }
 
     void Update()
     {
+        // A player has to be able to leave. Without this the only way out of
+        // a match is to kill the process, which is not a thing a finished
+        // game should require.
+        if (Input.GetKeyDown(KeyCode.Escape) && canvas != null && canvas.gameObject.activeSelf)
+        {
+            TogglePause();
+        }
+
         if (toastLabel != null && toastLabel.gameObject.activeSelf && Time.time > toastUntil)
         {
             toastLabel.gameObject.SetActive(false);
@@ -191,6 +201,80 @@ public class UIGameHud : MonoBehaviour
         rect.anchoredPosition = position;
     }
 
+    // ---------- Pause ----------
+
+    private void BuildPausePanel()
+    {
+        pauseRoot = UIBuilder.FullScreen(canvas.transform, "PausePanel",
+                new Color(0.02f, 0.03f, 0.07f, 0.88f));
+
+        UIBuilder.Label(pauseRoot.transform, "Paused", UITheme.TitleSize,
+                UITheme.Accent, new Vector2(0f, 180f), 700f, 80f);
+
+        UIBuilder.TextButton(pauseRoot.transform, "RESUME", new Vector2(0f, 60f),
+                () => SetPaused(false), true, 300f);
+
+        UIBuilder.TextButton(pauseRoot.transform, "LEAVE MATCH", new Vector2(0f, -10f),
+                LeaveMatch, false, 300f);
+
+        UIBuilder.TextButton(pauseRoot.transform, "QUIT GAME", new Vector2(0f, -80f),
+                QuitGame, false, 300f);
+
+        UIBuilder.Label(pauseRoot.transform, "Press Escape to go back",
+                UITheme.SmallSize, UITheme.TextMuted, new Vector2(0f, -170f), 700f, 32f);
+
+        pauseRoot.SetActive(false);
+    }
+
+    private void TogglePause()
+    {
+        if (pauseRoot == null) return;
+
+        // Never over the result screen - the match is already over there.
+        if (resultRoot != null && resultRoot.activeSelf) return;
+
+        SetPaused(!pauseRoot.activeSelf);
+    }
+
+    public bool IsPaused
+    {
+        get { return pauseRoot != null && pauseRoot.activeSelf; }
+    }
+
+    private void SetPaused(bool paused)
+    {
+        if (pauseRoot == null) return;
+
+        pauseRoot.SetActive(paused);
+
+        // The match keeps running on the server, so time is not stopped -
+        // pausing here only hides the courtyard and frees the mouse. A
+        // player who steps away is still in the room.
+        Cursor.visible = true;
+    }
+
+    private void LeaveMatch()
+    {
+        SetPaused(false);
+
+        if (NetworkClient.Instance != null) NetworkClient.Instance.Disconnect();
+        SessionData.ClearRoom();
+
+        SetVisible(false);
+        if (UIManager.Instance != null) UIManager.Instance.Show(UIManager.Screen.MainMenu);
+    }
+
+    private void QuitGame()
+    {
+        if (NetworkClient.Instance != null) NetworkClient.Instance.Disconnect();
+
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
+    }
+
     // ---------- Called by NetworkGameManager ----------
 
     public void SetVisible(bool visible)
@@ -202,6 +286,7 @@ public class UIGameHud : MonoBehaviour
         {
             if (guessRoot != null) guessRoot.SetActive(false);
             if (resultRoot != null) resultRoot.SetActive(false);
+            if (pauseRoot != null) pauseRoot.SetActive(false);
         }
     }
 
