@@ -20,11 +20,27 @@ public class UIGameHud : MonoBehaviour
     private GameObject resultRoot;
     private GameObject pauseRoot;
 
-    private TextMeshProUGUI levelLabel;
-    private TextMeshProUGUI roundLabel;
-    private TextMeshProUGUI roleLabel;
-    private TextMeshProUGUI hintLabel;
-    private TextMeshProUGUI scoreLabel;
+    // Unified RightGameplayHUD elements
+    private GameObject rightHudRoot;
+    private RectTransform levelPanelRect;
+    private TextMeshProUGUI chapterNumberLabel;
+    private TextMeshProUGUI chapterTitleLabel;
+    private TextMeshProUGUI roundInfoLabel;
+
+    private RectTransform catcherPanelRect;
+    private TextMeshProUGUI catcherLabel;
+    private TextMeshProUGUI catcherNameLabel;
+    private TextMeshProUGUI blindfoldStatusLabel;
+
+    private RectTransform scorePanelRect;
+    private TextMeshProUGUI scoreTitleLabel;
+    private TextMeshProUGUI playerScoreListLabel;
+    private int lastLeadingScore = -1;
+
+    // Left Gameplay HUD (Controls & Guide)
+    private GameObject leftHudRoot;
+    private TextMeshProUGUI leftGuideTipLabel;
+
     private TextMeshProUGUI toastLabel;
 
     private TextMeshProUGUI guessPrompt;
@@ -97,43 +113,163 @@ public class UIGameHud : MonoBehaviour
         hudRoot.transform.SetParent(canvas.transform, false);
         UIBuilder.StretchToParent(hudRoot.GetComponent<RectTransform>());
 
-        // Top left: where you are in the match.
-        GameObject topLeft = UIBuilder.Panel(hudRoot.transform, "LevelPanel",
-                new Color(UITheme.Panel.r, UITheme.Panel.g, UITheme.Panel.b, 0.82f),
-                new Vector2(420f, 96f), Vector2.zero);
-        Anchor(topLeft, new Vector2(0f, 1f), new Vector2(230f, -66f));
+        // Unified RightGameplayHUD container anchored to the right side (shifted inward toward middle)
+        rightHudRoot = new GameObject("RightGameplayHUD", typeof(RectTransform));
+        rightHudRoot.transform.SetParent(hudRoot.transform, false);
+        RectTransform rightRect = rightHudRoot.GetComponent<RectTransform>();
+        rightRect.anchorMin = new Vector2(1f, 0.5f);
+        rightRect.anchorMax = new Vector2(1f, 0.5f);
+        rightRect.pivot = new Vector2(1f, 0.5f);
+        rightRect.sizeDelta = new Vector2(280f, 440f);
+        rightRect.anchoredPosition = new Vector2(-70f, 0f);
 
-        levelLabel = UIBuilder.Label(topLeft.transform, "", UITheme.BodySize,
-                UITheme.Accent, new Vector2(0f, 20f), 390f, 34f, TextAlignmentOptions.Left);
-        roundLabel = UIBuilder.Label(topLeft.transform, "", UITheme.SmallSize,
-                UITheme.TextMuted, new Vector2(0f, -16f), 390f, 30f, TextAlignmentOptions.Left);
+        // Thin decorative outer border frame
+        GameObject border = UIBuilder.Panel(rightHudRoot.transform, "Border",
+                new Color(0.25f, 0.32f, 0.48f, 0.65f),
+                new Vector2(280f, 440f), Vector2.zero);
+        UIBuilder.StretchToParent(border.GetComponent<RectTransform>());
 
-        // Top right: who you are and who is blindfolded.
-        GameObject topRight = UIBuilder.Panel(hudRoot.transform, "RolePanel",
-                new Color(UITheme.Panel.r, UITheme.Panel.g, UITheme.Panel.b, 0.82f),
-                new Vector2(460f, 120f), Vector2.zero);
-        Anchor(topRight, new Vector2(1f, 1f), new Vector2(-250f, -78f));
+        // Dark navy inner background with subtle transparency
+        GameObject bg = UIBuilder.Panel(border.transform, "Background",
+                new Color(UITheme.Panel.r, UITheme.Panel.g, UITheme.Panel.b, 0.90f),
+                Vector2.zero, Vector2.zero);
+        RectTransform bgRect = bg.GetComponent<RectTransform>();
+        bgRect.anchorMin = Vector2.zero;
+        bgRect.anchorMax = Vector2.one;
+        bgRect.offsetMin = new Vector2(2f, 2f);
+        bgRect.offsetMax = new Vector2(-2f, -2f);
 
-        roleLabel = UIBuilder.Label(topRight.transform, "", UITheme.HeadingSize,
-                UITheme.TextPrimary, new Vector2(0f, 26f), 430f, 44f, TextAlignmentOptions.Right);
-        hintLabel = UIBuilder.Label(topRight.transform, "", UITheme.SmallSize,
-                UITheme.TextMuted, new Vector2(0f, -22f), 430f, 32f, TextAlignmentOptions.Right);
+        // 1. LevelPanel
+        GameObject levelPanel = new GameObject("LevelPanel", typeof(RectTransform));
+        levelPanel.transform.SetParent(bg.transform, false);
+        levelPanelRect = levelPanel.GetComponent<RectTransform>();
+        levelPanelRect.sizeDelta = new Vector2(250f, 90f);
+        levelPanelRect.anchoredPosition = new Vector2(0f, 155f);
 
-        // Bottom right: the scoreboard.
-        GameObject scorePanel = UIBuilder.Panel(hudRoot.transform, "ScorePanel",
-                new Color(UITheme.Panel.r, UITheme.Panel.g, UITheme.Panel.b, 0.82f),
-                new Vector2(320f, 220f), Vector2.zero);
-        Anchor(scorePanel, new Vector2(1f, 0f), new Vector2(-180f, 130f));
+        chapterNumberLabel = UIBuilder.Label(levelPanel.transform, "CHAPTER 1", 14,
+                UITheme.Accent, new Vector2(0f, 26f), 250f, 22f, TextAlignmentOptions.Center);
+        chapterTitleLabel = UIBuilder.Label(levelPanel.transform, "THE CHALLENGE", 20,
+                UITheme.TextPrimary, new Vector2(0f, 2f), 250f, 30f, TextAlignmentOptions.Center);
+        roundInfoLabel = UIBuilder.Label(levelPanel.transform, "ROUND 1 / 3   ·   4 PLAYERS", 13,
+                UITheme.TextMuted, new Vector2(0f, -24f), 250f, 20f, TextAlignmentOptions.Center);
 
-        UIBuilder.Label(scorePanel.transform, "Scores", UITheme.SmallSize,
-                UITheme.Accent, new Vector2(0f, 82f), 280f, 30f);
-        scoreLabel = UIBuilder.Label(scorePanel.transform, "", UITheme.BodySize,
-                UITheme.TextPrimary, new Vector2(0f, -14f), 280f, 160f);
+        // Subtle divider 1
+        CreateDivider(bg.transform, "Divider1", new Vector2(0f, 95f));
+
+        // 2. CatcherPanel
+        GameObject catcherPanel = new GameObject("CatcherPanel", typeof(RectTransform));
+        catcherPanel.transform.SetParent(bg.transform, false);
+        catcherPanelRect = catcherPanel.GetComponent<RectTransform>();
+        catcherPanelRect.sizeDelta = new Vector2(250f, 90f);
+        catcherPanelRect.anchoredPosition = new Vector2(0f, 35f);
+
+        catcherLabel = UIBuilder.Label(catcherPanel.transform, "KANAMACHI", 14,
+                UITheme.Accent, new Vector2(0f, 26f), 250f, 22f, TextAlignmentOptions.Center);
+        catcherNameLabel = UIBuilder.Label(catcherPanel.transform, "-", 20,
+                UITheme.TextPrimary, new Vector2(0f, 2f), 250f, 30f, TextAlignmentOptions.Center);
+        blindfoldStatusLabel = UIBuilder.Label(catcherPanel.transform, "<color=#C8362B>●</color> BLINDFOLDED", 13,
+                UITheme.TextMuted, new Vector2(0f, -24f), 250f, 20f, TextAlignmentOptions.Center);
+
+        // Subtle divider 2
+        CreateDivider(bg.transform, "Divider2", new Vector2(0f, -25f));
+
+        // 3. ScorePanel
+        GameObject scorePanel = new GameObject("ScorePanel", typeof(RectTransform));
+        scorePanel.transform.SetParent(bg.transform, false);
+        scorePanelRect = scorePanel.GetComponent<RectTransform>();
+        scorePanelRect.sizeDelta = new Vector2(250f, 170f);
+        scorePanelRect.anchoredPosition = new Vector2(0f, -120f);
+
+        scoreTitleLabel = UIBuilder.Label(scorePanel.transform, "SCORES", 14,
+                UITheme.Accent, new Vector2(0f, 65f), 250f, 22f, TextAlignmentOptions.Center);
+        playerScoreListLabel = UIBuilder.Label(scorePanel.transform, "", 16,
+                UITheme.TextPrimary, new Vector2(0f, -10f), 240f, 120f, TextAlignmentOptions.TopLeft);
+
+        // LeftGameplayHUD container anchored to the left side (filling empty left space)
+        leftHudRoot = new GameObject("LeftGameplayHUD", typeof(RectTransform));
+        leftHudRoot.transform.SetParent(hudRoot.transform, false);
+        RectTransform leftRect = leftHudRoot.GetComponent<RectTransform>();
+        leftRect.anchorMin = new Vector2(0f, 0.5f);
+        leftRect.anchorMax = new Vector2(0f, 0.5f);
+        leftRect.pivot = new Vector2(0f, 0.5f);
+        leftRect.sizeDelta = new Vector2(280f, 440f);
+        leftRect.anchoredPosition = new Vector2(70f, 0f);
+
+        // Left border
+        GameObject leftBorder = UIBuilder.Panel(leftHudRoot.transform, "LeftBorder",
+                new Color(0.25f, 0.32f, 0.48f, 0.65f),
+                new Vector2(280f, 440f), Vector2.zero);
+        UIBuilder.StretchToParent(leftBorder.GetComponent<RectTransform>());
+
+        // Left background
+        GameObject leftBg = UIBuilder.Panel(leftBorder.transform, "LeftBackground",
+                new Color(UITheme.Panel.r, UITheme.Panel.g, UITheme.Panel.b, 0.90f),
+                Vector2.zero, Vector2.zero);
+        RectTransform leftBgRect = leftBg.GetComponent<RectTransform>();
+        leftBgRect.anchorMin = Vector2.zero;
+        leftBgRect.anchorMax = Vector2.one;
+        leftBgRect.offsetMin = new Vector2(2f, 2f);
+        leftBgRect.offsetMax = new Vector2(-2f, -2f);
+
+        // Left Header: Bengali Kanamachi Title & Lore
+        GameObject headerPanel = new GameObject("HeaderPanel", typeof(RectTransform));
+        headerPanel.transform.SetParent(leftBg.transform, false);
+        RectTransform headerRect = headerPanel.GetComponent<RectTransform>();
+        headerRect.sizeDelta = new Vector2(250f, 80f);
+        headerRect.anchoredPosition = new Vector2(0f, 155f);
+
+        UIBuilder.Label(headerPanel.transform, "KANAMACHI BHO BHO", 14,
+                UITheme.Accent, new Vector2(0f, 26f), 250f, 22f, TextAlignmentOptions.Center);
+        UIBuilder.Label(headerPanel.transform, "TRADITIONAL TAG", 20,
+                UITheme.TextPrimary, new Vector2(0f, 2f), 250f, 30f, TextAlignmentOptions.Center);
+        UIBuilder.Label(headerPanel.transform, "\"JAKE PABI TAKE CHHO!\"", 13,
+                UITheme.TextMuted, new Vector2(0f, -24f), 250f, 20f, TextAlignmentOptions.Center);
+
+        CreateDivider(leftBg.transform, "LeftDivider1", new Vector2(0f, 95f));
+
+        // Left Controls Panel
+        GameObject controlsPanel = new GameObject("ControlsPanel", typeof(RectTransform));
+        controlsPanel.transform.SetParent(leftBg.transform, false);
+        RectTransform controlsRect = controlsPanel.GetComponent<RectTransform>();
+        controlsRect.sizeDelta = new Vector2(250f, 130f);
+        controlsRect.anchoredPosition = new Vector2(0f, 30f);
+
+        UIBuilder.Label(controlsPanel.transform, "CONTROLS", 14,
+                UITheme.Accent, new Vector2(0f, 48f), 250f, 22f, TextAlignmentOptions.Center);
+
+        string controlsText = "WASD / ARROWS<pos=150>MOVE\n" +
+                              "SPACE<pos=150>CATCH\n" +
+                              "C KEY<pos=150>CLAP\n" +
+                              "ESCAPE<pos=150>PAUSE";
+        UIBuilder.Label(controlsPanel.transform, controlsText, 14,
+                UITheme.TextPrimary, new Vector2(0f, -16f), 240f, 90f, TextAlignmentOptions.TopLeft);
+
+        CreateDivider(leftBg.transform, "LeftDivider2", new Vector2(0f, -45f));
+
+        // Left Dynamic Guide / How To Play Panel
+        GameObject guidePanel = new GameObject("GuidePanel", typeof(RectTransform));
+        guidePanel.transform.SetParent(leftBg.transform, false);
+        RectTransform guideRect = guidePanel.GetComponent<RectTransform>();
+        guideRect.sizeDelta = new Vector2(250f, 130f);
+        guideRect.anchoredPosition = new Vector2(0f, -130f);
+
+        UIBuilder.Label(guidePanel.transform, "HOW TO PLAY", 14,
+                UITheme.Accent, new Vector2(0f, 48f), 250f, 22f, TextAlignmentOptions.Center);
+        leftGuideTipLabel = UIBuilder.Label(guidePanel.transform,
+                "<color=#5DCAA5>RUN & HIDE!</color>\nEvade the blindfolded player.\nPress <color=#F2C14E>C</color> to clap & guide!",
+                13, UITheme.TextPrimary, new Vector2(0f, -14f), 240f, 90f, TextAlignmentOptions.Center);
 
         // Centre: short-lived feedback such as "Too far away".
         toastLabel = UIBuilder.Label(hudRoot.transform, "", UITheme.HeadingSize,
                 UITheme.Accent, new Vector2(0f, -220f), 900f, 50f);
         toastLabel.gameObject.SetActive(false);
+    }
+
+    private void CreateDivider(Transform parent, string name, Vector2 pos)
+    {
+        UIBuilder.Panel(parent, name,
+                new Color(UITheme.Accent.r, UITheme.Accent.g, UITheme.Accent.b, 0.35f),
+                new Vector2(250f, 2f), pos);
     }
 
     private void BuildGuessPanel()
@@ -290,52 +426,171 @@ public class UIGameHud : MonoBehaviour
         }
     }
 
+    private void GetStoryChapter(string levelName, out string num, out string title)
+    {
+        if (string.IsNullOrEmpty(levelName))
+        {
+            num = "CHAPTER 1";
+            title = "THE CHALLENGE";
+            return;
+        }
+        string lower = levelName.ToLower();
+        if (lower.Contains("courtyard") || lower.Contains("challenge") || lower.Contains("1"))
+        {
+            num = "CHAPTER 1";
+            title = "THE CHALLENGE";
+            return;
+        }
+        if (lower.Contains("mela") || lower.Contains("2"))
+        {
+            num = "CHAPTER 2";
+            title = "THE MELA GROUND";
+            return;
+        }
+        if (lower.Contains("storm") || lower.Contains("night") || lower.Contains("3"))
+        {
+            num = "CHAPTER 3";
+            title = "THE STORM NIGHT";
+            return;
+        }
+        if (lower.Contains("final") || lower.Contains("catch") || lower.Contains("4"))
+        {
+            num = "CHAPTER 4";
+            title = "THE FINAL CATCH";
+            return;
+        }
+
+        num = "CHAPTER";
+        title = levelName.ToUpper();
+    }
+
     public void SetLevel(string levelName, int roundInLevel, int roundsPerLevel, int playerCount)
     {
-        if (levelLabel == null) return;
+        if (chapterTitleLabel == null) return;
 
-        levelLabel.text = string.IsNullOrEmpty(levelName) ? "Waiting..." : levelName;
-        roundLabel.text = string.IsNullOrEmpty(levelName)
-                ? $"{playerCount} in the room"
-                : $"Round {roundInLevel}/{roundsPerLevel}   ·   {playerCount} players";
+        GetStoryChapter(levelName, out string num, out string title);
+        bool chapterChanged = chapterTitleLabel.text != title;
+        string expectedRound = string.IsNullOrEmpty(levelName)
+                ? $"{playerCount} PLAYERS"
+                : $"ROUND {roundInLevel} / {roundsPerLevel}   ·   {playerCount} PLAYERS";
+        bool roundChanged = roundInfoLabel.text != expectedRound;
+
+        chapterNumberLabel.text = num;
+        chapterTitleLabel.text = title;
+        roundInfoLabel.text = expectedRound;
+
+        if ((chapterChanged || roundChanged) && levelPanelRect != null && gameObject.activeInHierarchy)
+        {
+            StartCoroutine(PulseFade(levelPanelRect));
+        }
     }
 
     public void SetRole(string yourName, bool youAreKanamachi, string kanamachiName, bool canCatch)
     {
-        if (roleLabel == null) return;
+        if (catcherNameLabel == null) return;
 
-        roleLabel.text = youAreKanamachi ? "You are the Kanamachi" : yourName;
-        roleLabel.color = youAreKanamachi ? UITheme.Danger : UITheme.TextPrimary;
+        string targetName = youAreKanamachi
+                ? (string.IsNullOrEmpty(yourName) ? "YOU" : $"{yourName} (YOU)")
+                : (string.IsNullOrEmpty(kanamachiName) ? "Waiting..." : kanamachiName);
+        bool changed = catcherNameLabel.text != targetName;
+
+        catcherLabel.text = "KANAMACHI";
+        catcherNameLabel.text = targetName;
+        catcherNameLabel.color = youAreKanamachi ? UITheme.Accent : UITheme.TextPrimary;
 
         if (youAreKanamachi)
         {
-            hintLabel.text = canCatch ? "Press Space to grab someone" : "Listen for footsteps";
+            blindfoldStatusLabel.text = canCatch
+                    ? "<color=#5DCAA5>●</color> PRESS SPACE TO CATCH"
+                    : "<color=#C8362B>●</color> BLINDFOLDED";
         }
         else
         {
-            hintLabel.text = string.IsNullOrEmpty(kanamachiName)
-                    ? "Waiting for the match to start"
-                    : $"{kanamachiName} is blindfolded";
+            blindfoldStatusLabel.text = string.IsNullOrEmpty(kanamachiName)
+                    ? "WAITING FOR MATCH"
+                    : "<color=#C8362B>●</color> BLINDFOLDED";
+        }
+
+        if (changed && catcherNameLabel != null && gameObject.activeInHierarchy)
+        {
+            StartCoroutine(PunchScale(catcherNameLabel.rectTransform));
+        }
+
+        if (leftGuideTipLabel != null)
+        {
+            leftGuideTipLabel.text = youAreKanamachi
+                    ? "<color=#F2C14E>YOU ARE KANAMACHI!</color>\nListen for footsteps & claps.\nApproach & press <color=#F2C14E>SPACE</color> to catch!"
+                    : "<color=#5DCAA5>RUN & HIDE!</color>\nEvade the blindfolded player.\nPress <color=#F2C14E>C</color> to clap & guide!";
         }
     }
 
     public void SetScores(IEnumerable<KeyValuePair<string, int>> scores,
                           System.Func<string, string> nameOf, string leadingUserId)
     {
-        if (scoreLabel == null) return;
+        if (playerScoreListLabel == null) return;
 
         System.Text.StringBuilder builder = new System.Text.StringBuilder();
+        int highestScore = -1;
+
         foreach (var pair in scores)
         {
-            bool leading = pair.Key == leadingUserId;
-            string line = $"{nameOf(pair.Key)}   {pair.Value}";
+            string name = nameOf(pair.Key);
+            int score = pair.Value;
+            if (score > highestScore) highestScore = score;
 
-            // Rich text rather than a star glyph, which the default TMP
-            // font atlas does not contain and draws as an empty box.
-            builder.AppendLine(leading ? $"<color=#F2C14E>{line}</color>" : line);
+            bool isLeading = pair.Key == leadingUserId && score > 0;
+            bool isLocal = !string.IsNullOrEmpty(SessionData.UserId) && pair.Key == SessionData.UserId;
+
+            string displayName = isLocal ? $"{name} <size=12><color=#F2C14E>(YOU)</color></size>" : name;
+
+            string line = isLeading
+                    ? $"<color=#F2C14E>{displayName}</color><pos=180><color=#F2C14E>{score}</color>"
+                    : $"{displayName}<pos=180>{score}";
+
+            builder.AppendLine(line);
         }
 
-        scoreLabel.text = builder.ToString();
+        playerScoreListLabel.text = builder.ToString().TrimEnd();
+
+        if (highestScore > lastLeadingScore && lastLeadingScore >= 0 && scorePanelRect != null && gameObject.activeInHierarchy)
+        {
+            StartCoroutine(PunchScale(scorePanelRect));
+        }
+        lastLeadingScore = highestScore;
+    }
+
+    private System.Collections.IEnumerator PunchScale(RectTransform target)
+    {
+        if (target == null) yield break;
+        float elapsed = 0f;
+        float duration = 0.25f;
+        Vector3 orig = Vector3.one;
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = elapsed / duration;
+            float scale = 1f + 0.12f * Mathf.Sin(t * Mathf.PI);
+            target.localScale = orig * scale;
+            yield return null;
+        }
+        target.localScale = orig;
+    }
+
+    private System.Collections.IEnumerator PulseFade(RectTransform target)
+    {
+        if (target == null) yield break;
+        CanvasGroup cg = target.GetComponent<CanvasGroup>();
+        if (cg == null) cg = target.gameObject.AddComponent<CanvasGroup>();
+        cg.alpha = 1f;
+        float elapsed = 0f;
+        float duration = 0.3f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            cg.alpha = Mathf.Lerp(0.35f, 1f, elapsed / duration);
+            yield return null;
+        }
+        cg.alpha = 1f;
     }
 
     public void ShowToast(string message, float seconds = 2.5f)
