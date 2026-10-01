@@ -134,9 +134,64 @@ written when the final round ends.
 
 ---
 
-## Status
+## V1 Status
 
-Phases 1 to 7 are complete. Deployment, automated tests and the written
-report remain.
+**V1 COMPLETE**
 
-See `docs/` for the art style guide and phase notes.
+Kanamachi V1 includes:
+
+- Core Kanamachi gameplay
+- 2–4 player multiplayer
+- Human and AI players
+- Four AI personalities
+- Four story-driven levels
+- Catch and identity-guess system
+- Sound-based gameplay
+- Footsteps and clap mechanics
+- Kanamachi blindfold vision
+- Dynamic lighting and limited vision radius
+- Pixel-art environments
+- Level-specific environments and atmosphere
+- Character selection
+- Game room and room-code system
+- Server-authoritative gameplay
+- WebSocket networking
+- REST API
+- MongoDB database
+- Authentication and player profiles
+- Score and statistics system
+- Leaderboard
+- Gameplay HUD
+- Story and level transitions
+- Round and catch/guess feedback
+- Pause and settings UI
+- Alpona-based Kanamachi indicator
+- Complete V1 UI/UX
+
+## Project Structure
+
+```text
+game-client/Assets/
+  Art/            environment and gameplay art
+  Characters/     character definitions
+  Prefabs/
+  Scripts/
+    Network/      REST and WebSocket clients
+    UI/           game UI
+    *.cs          gameplay, levels, sound cues, story and AI
+
+game-server/src/main/java/com/kanamachi/game_server/
+  controller/     auth, rooms, leaderboard
+  game/           rooms, sessions, slots, player state
+  model/          MongoDB documents
+  repository/
+  service/
+  websocket/      live multiplayer match
+```
+
+## V1 Completion
+
+Kanamachi V1 is complete. The current version contains the complete playable
+game experience, multiplayer systems, AI, four levels, environments, audio
+gameplay, blindfold mechanics, UI/UX, player data, authentication, rooms,
+statistics and leaderboard systems.
